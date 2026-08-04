@@ -58,6 +58,12 @@ Mobile-first (spec Section 17) is now a **verified, not assumed** characteristic
 
 **Also confirmed:** image and video `PreviewCard`s (including the video player's native controls) reflow correctly at every breakpoint with no distortion or clipping — spot-checked visually at all 5 widths, not just algorithmically.
 
+### Re-run against InstallModal (2026-08-04)
+
+Per the standing rule above ("re-run whenever layout-affecting UI changes"), re-ran the same 5-breakpoint methodology specifically against the new `InstallModal` after building it and fixing the two bugs described in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#pwa-install-prompt-system-2026-08-04). Opened via a synthetic `beforeinstallprompt` event at each breakpoint (375/430/768/1024/1440px), waited past the 2.5s show delay, then checked overflow, dialog clipping against the viewport, and touch-target size on every button inside the dialog.
+
+**Result:** 0 overflow issues, 0 clipping issues, 15/15 touch targets (3 buttons × 5 breakpoints) pass ≥44×44px. Screenshots taken at every breakpoint and visually spot-checked — modal stays centered and fully within viewport at all 5 widths, buttons stack full-width below `sm:` and sit side-by-side above it, no distortion.
+
 ## Known test gaps
 
 - Private-account detection is implemented but not live-verified — blocked, see above.

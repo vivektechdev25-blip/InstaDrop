@@ -57,4 +57,4 @@ pnpm dev:api
 
 ## Status
 
-Repository scaffolding is complete. See [docs/ROADMAP.md](./docs/ROADMAP.md) for the 5-day MVP build plan and [docs/TODO.md](./docs/TODO.md) for the active task list.
+MVP build is well underway: scraper, SEO, rate limiting, responsive UI, and PWA support (installable app shell + an install prompt with `InstallModal`/`InstallButton`) have all landed and been live-verified. See [docs/ROADMAP.md](./docs/ROADMAP.md) for current status and [docs/TODO.md](./docs/TODO.md) for the active task list.

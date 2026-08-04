@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { ToastProvider } from "@/hooks/useToast";
 import { useServiceWorker } from "@/hooks/useServiceWorker";
 import { Toaster } from "@/components/ui/Toaster";
+import { InstallModal } from "@/components/pwa/InstallModal";
 
 export function Providers({ children }: { children: ReactNode }) {
   useServiceWorker();
@@ -17,6 +18,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <ToastProvider>
           {children}
           <Toaster />
+          <InstallModal />
         </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>

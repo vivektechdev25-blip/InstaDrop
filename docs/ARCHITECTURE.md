@@ -79,3 +79,35 @@ Decision made 2026-08-04, after live-testing showed every anonymous, session-les
 
 **Latency:** the spec's <800ms extraction target ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) applies only to the Tier 1 success path. Tier 2 launches a real browser and waits for the page to render — confirmed live at ~4-5 seconds per request. This is an accepted tradeoff: reliability over raw speed for the fallback path, since Tier 1 alone is not dependable enough to be the only tier.
 
+## PWA install prompt system
+
+Layered so each piece is independently testable, mirroring the scraper tiers' separation of pure logic from browser/IO concerns. Mounted once, globally, in `apps/web/src/app/providers.tsx` — never inside a page component, so it persists across route changes and isn't duplicated.
+
+```
+usePWAInstall()  <-- the only public interface; everything below is an implementation detail
+  |-- lib/pwaService.ts            Raw browser API only: beforeinstallprompt/appinstalled
+  |                                 listeners, isStandalone() (display-mode: standalone),
+  |                                 triggerInstallPrompt(). No React, no storage, no decisions.
+  |-- lib/installPromptManager.ts  Pure decision logic, no React, no browser API calls:
+  |                                 shouldShowPrompt(), dismissal-cooldown bookkeeping,
+  |                                 the 3-dismissal opt-out cap. Testable with plain function
+  |                                 calls against a fake storage backend.
+  `-- lib/storage.ts               Generic localStorage helper (get/set/remove with optional
+                                    TTL). Not PWA-specific - reusable for any future
+                                    localStorage need.
+
+components/pwa/
+  |-- InstallModal.tsx   The popup. Built on the existing Dialog primitive
+  |                      (components/ui/Dialog.tsx) rather than a hand-rolled overlay,
+  |                      specifically to inherit its focus trap, aria-modal, and
+  |                      Escape-to-dismiss for free.
+  `-- InstallButton.tsx  Reusable trigger (renders nothing when there's no captured
+                         prompt to trigger) - usable standalone, not just inside the modal.
+```
+
+**Data flow:** `beforeinstallprompt` fires -> `pwaService.ts` captures it (via `event.preventDefault()`, deferring Chrome's native mini-infobar) and hands the event to `usePWAInstall` -> the hook asks `installPromptManager.shouldShowPrompt()` whether policy allows showing it right now -> `InstallModal` waits an additional ~2.5s show-delay past eligibility, then opens -> Accept calls `event.prompt()` and persists an "installed" flag; Dismiss ("Maybe Later", Escape, overlay click, or the dialog's own close button all count) records a dismissal and starts a cooldown (3 days or 3 visits, whichever elapses first) before the modal is eligible to reappear, up to a hard cap of 3 dismissals after which the user is treated as permanently opted out.
+
+**Reminder defaults and reasoning:** 3-day / 3-visit cooldown (whichever elapses first) balances not annoying a user who just said no against not permanently losing the chance to convert someone who dismissed out of momentary friction, not disinterest. Max 3 dismissals before permanent opt-out, because past that point repeated prompting reads as nagging rather than a helpful reminder — decided with the user 2026-08-04.
+
+**iOS Safari gap:** Safari never fires `beforeinstallprompt` at all (it has no A2HS API), so `canInstall` is permanently `false` there and the modal never appears — not a bug, a platform limitation. An iOS-specific instructional variant (manual "tap Share, then Add to Home Screen" walkthrough) was considered and explicitly deferred; documented as a known limitation in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+

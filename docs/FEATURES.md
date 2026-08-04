@@ -13,6 +13,8 @@
 ## Progressive Web App
 
 - [x] Installable app shell — manifest with real icons, hand-rolled service worker (network-first navigations, cache-first assets), confirmed live including an actual offline reload test. See [SEO.md](./SEO.md#pwa).
+- [x] Install prompt system — `InstallModal` + `InstallButton`, global (not page-scoped), with a ~2.5s show delay, a 3-day/3-visit dismissal cooldown, and a 3-dismissal permanent opt-out cap. Focus-trapped, `aria-modal`, Escape-to-dismiss. Full behavioral suite (show delay, install/dismiss/escape flows, dismissal cap, aria-modal, touch targets) confirmed live via Playwright with a synthetic `beforeinstallprompt` event, and confirmed clean at all 5 responsive breakpoints (375/430/768/1024/1440px) — see [ARCHITECTURE.md](./ARCHITECTURE.md#pwa-install-prompt-system). **Not yet verified:** a real, non-automated Chrome session actually firing `beforeinstallprompt` end-to-end — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md). iOS Safari never fires this event at all (documented limitation, no instructional fallback built).
+- [ ] `InstallBanner` — lower-priority alternative surface, not yet built (confirmed lowest priority by the user 2026-08-04; build only if time allows).
 
 ## Explicitly out of MVP scope (post-MVP roadmap)
 

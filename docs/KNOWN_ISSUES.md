@@ -121,6 +121,28 @@ Established a permanent responsive-verification baseline (5 breakpoints, real Pl
 
 Zero horizontal overflow found at any breakpoint, before or after.
 
+## PWA install prompt system (2026-08-04)
+
+### iOS Safari: no instructional fallback (deferred, known limitation)
+
+Safari (iOS and iPadOS) never fires `beforeinstallprompt` — it has no equivalent API — so `usePWAInstall().canInstall` is permanently `false` there and `InstallModal` never appears for those users. An iOS-specific instructional variant (a manual walkthrough: "tap Share, then Add to Home Screen") was proposed and **explicitly deferred** by the user on 2026-08-04, in favor of shipping the standard-API path first. iOS users can still install manually via Safari's native Share menu; the app just doesn't prompt them to. Revisit if iOS install rate matters enough to justify the extra UI.
+
+### Two real bugs found and fixed while building `InstallModal`
+
+Found via live Playwright checks (`getAttribute`, `getComputedStyle`, `getBoundingClientRect`), not code review:
+
+| Bug found live | Fix |
+|---|---|
+| `[role="dialog"]` had no `aria-modal` attribute (`getAttribute('aria-modal')` returned `null`) despite Radix trapping focus correctly. This version of `@radix-ui/react-dialog` sets `role`, `aria-labelledby`, `aria-describedby` automatically, but not `aria-modal` — the two are related but distinct signals, and screen readers rely on `aria-modal` specifically to treat outside content as inert. | Added `aria-modal="true"` explicitly to `DialogContent` in `apps/web/src/components/ui/Dialog.tsx`. Re-verified: now returns `"true"`. |
+| `InstallModal`'s two action buttons measured ~20px tall despite having Tailwind's `h-11` (44px) class applied. Root cause via `getComputedStyle()`: both buttons had `flex-1` (`flex: 1 1 0%`) inside a `flex flex-col` (column-direction) parent. In a column flex container, `flex-basis` governs main-axis (vertical) sizing and overrides an explicit `height` class — a genuine CSS flexbox spec behavior, not a framework bug. Only manifested in the base/mobile layout, before the `sm:flex-row` breakpoint switches the main axis to horizontal. | Changed both buttons to `w-full sm:flex-1` in `InstallModal.tsx` — full width at the column/mobile layout, `flex-1` only applies once `sm:flex-row` makes it affect width instead of height. Re-verified: both buttons now measure 44px tall at all 5 responsive breakpoints. |
+| Dialog's close button (`DialogPrimitive.Close`) measured 16×16px — unsized, below the WCAG 2.5.5 / Apple HIG 44×44px minimum (same class of bug as the [responsive baseline touch-target findings](#responsive-baseline-two-bugs-found-and-fixed-2026-08-04) below). | Added `flex h-11 w-11 items-center justify-center` to `DialogPrimitive.Close` in `Dialog.tsx`, repositioned `right-4 top-4` → `right-2 top-2` to keep it visually balanced at the larger hit area. Re-verified: 44×44px. |
+
+All three re-verified together via a full rebuild + fresh Playwright behavioral suite (install/dismiss/escape/dismissal-cap flows) and a dedicated touch-target check — all pass, and confirmed clean at all 5 responsive breakpoints (375/430/768/1024/1440px): zero overflow, zero clipping, 15/15 touch targets ≥44×44px.
+
+### Real-browser `beforeinstallprompt` confirmation: pending, manual, not fabricated
+
+Everything above was verified with a **synthetic** `beforeinstallprompt` event dispatched via Playwright (`page.addInitScript`) — this proves the app's own logic (capture, decision-making, modal, storage, accessibility) is correct, but it does not prove Chrome's real install-eligibility heuristics actually fire the event against this app in a live browser session. That confirmation requires a real, non-headless Chrome session and is a manual step by design (per user decision 2026-08-04) — it cannot be verified in headless automation, and no attempt was made to fabricate this result. See [SEO.md](./SEO.md#pwa) for the related, previously-flagged gap on the base install-eligibility criteria (manifest/service-worker/HTTPS), which this inherits.
+
 ## Structural limitations to keep in mind
 
 - Instagram's DOM/API can change without notice — both scraper tiers are inherently fragile to Instagram-side changes; this is exactly why the tier system exists rather than depending on one technique.
