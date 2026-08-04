@@ -28,6 +28,12 @@ Live-tested against a confirmed-real, currently public Instagram post before cho
 
 `playwrightTier.ts` collects carousel slides by clicking the "Next" control and capturing newly-loaded images from the same CDN path family as the cover image (`t51.XXXXX-15`-style path segment). This mechanism is built on individually-verified primitives, but no real multi-slide (carousel) public post could be sourced this session to test the click-and-capture loop end-to-end. Carousel posts currently fall back to image-only (no video-in-carousel support). **Needs QA against a real carousel post before being trusted.**
 
+## Tier 2 (Playwright) image quality gap: `og:image` is a pre-cropped thumbnail
+
+Confirmed live via an actual browser screenshot of the rendered `PreviewCard`: for image posts served through the Playwright fallback tier, the image looks cropped in a way CSS `object-contain` doesn't fix. Traced to the source: Instagram's `og:image` URL itself carries a crop instruction in its query string (e.g. `stp=c270.0.810.810a_dst-jpg_e35_s640x640...`) — it's Instagram's own square feed-thumbnail rendition, not the original full-resolution image. This means **Tier 2 downloads currently do not meet the "original-resolution, no re-compression" requirement** ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) for image posts - only Tier 1 (`instagram-url-direct`, which reads the real `display_url` from Instagram's own API response) does.
+
+**Improvement path (not implemented):** during the initial page load, Playwright already sees multiple same-CDN-family (`t51.XXXXX-15`) image responses at different resolutions (Instagram loads several `srcset` renditions). Capturing all of them and keeping the largest instead of relying solely on the `og:image` meta tag should recover full resolution — needs live verification before shipping.
+
 ## Deployment gap: `packages/types` has no build step
 
 `packages/types/package.json` points `main`/`types` at raw `src/index.ts`. This works during development (Next.js and `tsx` both handle `.ts` imports directly via workspace symlinks), but a compiled production `node dist/app.js` process cannot `require()` a raw `.ts` file. `apps/api`'s Dockerfile will not actually run until `packages/types` gets a real build step (e.g. `tsup`/`tsc` emitting to `dist/`, with `main`/`types` pointed there). Not fixed yet — flagged for the Day 5 deployment work in [TODO.md](./TODO.md).

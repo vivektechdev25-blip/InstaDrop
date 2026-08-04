@@ -16,10 +16,12 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [ ] QA carousel extraction against a real multi-slide post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
 - [ ] QA private-account detection against a real private post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
 - [ ] Give `packages/types` a real build step before the API Dockerfile can actually run in production — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#deployment-gap-packagestypes-has-no-build-step)
+- [ ] Fix Tier 2 (Playwright) image resolution: currently returns Instagram's cropped `og:image` thumbnail, not the original — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#tier-2-playwright-image-quality-gap-ogimage-is-a-pre-cropped-thumbnail)
 
 ## Day 3 — Client integration & security
 - [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts
 - [x] Loading skeletons + error toasts
+- [x] Build `PreviewCard` (video player, carousel swiper, per-slide download) and wire the real download trigger — confirmed live in an actual browser (Playwright screenshot) for both image and reel posts; carousel UI built but untestable until a real carousel post is found, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
 - [ ] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API
 
 ## Day 4 — SEO, PWA & performance

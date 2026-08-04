@@ -5,6 +5,7 @@ import { ClipboardPaste, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { PreviewCard } from "@/components/downloader/PreviewCard";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useInstagramDownloader } from "@/hooks/useInstagramDownloader";
 import { useToast } from "@/hooks/useToast";
@@ -13,7 +14,7 @@ export function InputForm() {
   const [url, setUrl] = useState("");
   const { readText } = useClipboard();
   const { toast } = useToast();
-  const { status, errorMessage, submit } = useInstagramDownloader();
+  const { status, post, errorMessage, submit } = useInstagramDownloader();
   const lastAnnouncedError = useRef<string | null>(null);
 
   const isFetching = status === "FETCHING" || status === "VALIDATING";
@@ -101,6 +102,8 @@ export function InputForm() {
           <Skeleton className="h-4 w-1/3" />
         </div>
       ) : null}
+
+      {status === "SUCCESS" && post ? <PreviewCard post={post} /> : null}
     </div>
   );
 }

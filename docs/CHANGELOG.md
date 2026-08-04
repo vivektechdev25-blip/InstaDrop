@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 - `apps/api/Dockerfile` switched to the official `mcr.microsoft.com/playwright` base image (Chromium + all OS deps preinstalled) since Alpine can't reliably run Chromium; added root `.dockerignore`.
 - Implemented `downloadService.streamToResponse` (`GET /api/v1/download`) — proxy-streams the media file directly from the upstream CDN response to the client, setting `Content-Disposition: attachment` plus the correct `Content-Type`/`Content-Length`. Confirmed live end-to-end for both a real image and a real video CDN URL (valid, complete files verified with `file`).
 - SSRF guard on the download endpoint: `url` is restricted to `*.cdninstagram.com` / `*.fbcdn.net` hostnames via a Zod refinement, confirmed live to reject other hosts with `400 INVALID_URL`.
+- `PreviewCard` + `MediaViewer`: renders the fetched post (video player for reels/videos, prev/next + dot-indicator carousel for multi-slide posts) with a per-slide download button wired to `GET /api/v1/download`. Confirmed live in an actual browser via Playwright-driven screenshots of the running dev app, not just typechecking - real image post and real reel post both render correctly end-to-end from paste to preview.
 
 ### Changed
 - Rate limiting switched from Upstash Redis to `express-rate-limit` (in-memory), matching the MVP's single-instance Railway deployment. Removed `@upstash/redis` and `@upstash/ratelimit` dependencies and the corresponding env vars.
