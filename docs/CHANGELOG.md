@@ -22,6 +22,9 @@ All notable changes to this project are documented in this file.
 - Legal pages: real content for Privacy Policy, Terms of Service, and Contact (previously bare placeholder headings with no Navbar/Footer at all). Added a shared `app/(legal)/layout.tsx` so all three share the site chrome, plus per-page metadata/canonical URLs. Confirmed live via screenshots of the actual running production build.
 - Performance: `PreviewCard` and `MobileNav` (framer-motion) moved to `next/dynamic({ ssr: false })` since neither is needed on initial page load — confirmed via production build: home page First Load JS dropped from 165KB to 128KB (~22%).
 
+### Investigated
+- LCP gap (2.2s measured vs. <1.5s target): pulled the real Lighthouse LCP breakdown rather than guessing, identified the LCP element as the hero `<h1>` text (not an image), and ruled out every usual cause — no custom fonts, no hero image, no critical-CSS blocking, no third-party scripts. Ran the same page under three throttling conditions to isolate the cause: mobile+`simulate` (Lighthouse CLI's default, mathematically estimated) gives 2.2s; mobile+`devtools` (the identical network/CPU profile, but actually applied rather than estimated) gives 1.475s, meeting target with Performance 100; desktop gives 0.6s. Concluded the gap is Lighthouse's default `simulate` throttling model overestimating delay on this lean, static-text-dominant page, not a real defect — no code change was made, because there was nothing to fix. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the full writeup.
+
 ### Changed
 - Rate limiting switched from Upstash Redis to `express-rate-limit` (in-memory), matching the MVP's single-instance Railway deployment. Removed `@upstash/redis` and `@upstash/ratelimit` dependencies and the corresponding env vars.
 

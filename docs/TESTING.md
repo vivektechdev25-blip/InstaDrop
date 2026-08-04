@@ -25,7 +25,7 @@ Run against the home page (`/`) on a real production build (`next build && next 
 | Best Practices | 100 |
 | SEO | 100 |
 
-Core Web Vitals: FCP 0.8s, LCP 2.2s, CLS 0, TBT 20ms, Speed Index 0.8s — all comfortably within the NFR targets in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md).
+Core Web Vitals: FCP 0.8s, CLS 0, TBT 20ms, Speed Index 0.8s — all comfortably within the NFR targets in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md). LCP was 2.2s on this run (above the <1.5s target) — investigated in full and resolved as a measurement-methodology issue, not a code defect: under directly-applied (not simulated) equivalent throttling, LCP is 1.475s. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#lcp-investigation-2026-08-04-resolved-as-a-measurement-methodology-issue-not-a-code-defect) for the three-way comparison that confirms this.
 
 **Accessibility fix:** the first run scored 96, flagging the "Paste from clipboard" button (16×16px, icon-only with no padding) as failing the minimum 24×24px touch target size. Fixed by giving it a proper 36×36px hit area; found the same underlying issue in `PreviewCard`'s carousel dot indicators (6×6px visual dot was also the entire clickable area) and fixed it the same way — a larger invisible touch target around a small visual dot, not verified by this specific Lighthouse run since it only audits what's rendered on initial page load (the carousel only appears after a real multi-slide fetch), but the same class of bug and the same fix pattern. Re-ran Lighthouse after the fix: confirmed 100.
 
