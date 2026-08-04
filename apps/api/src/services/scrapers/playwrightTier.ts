@@ -1,4 +1,4 @@
-import type { Page, Response } from "playwright";
+import type { Page } from "playwright";
 import type { InstagramPost, MediaItem } from "@instadrop/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
@@ -47,16 +47,18 @@ interface PageMeta {
  * rendition by matching CDN media IDs against the page's actual <img>
  * elements. Confirmed live: recovered 1350x1688 from a 640x640 og:image.
  *
- * Carousel slide collection (clicking "Next" and capturing newly-loaded
- * images from the same CDN path family as the cover image) is implemented
- * but NOT live-verified against a real multi-image post - flagged as a
- * known limitation until QA'd against one. Worth noting while investigating
- * the image-resolution fix above: the CDN path family (e.g. "t51.82787-15")
- * used for that matching is NOT specific to this post - it's shared by
- * unrelated posts' images loaded elsewhere on the page (confirmed live),
- * so this carousel mechanism is on shakier ground than it looks. The
- * full-resolution fix above uses a tighter per-asset media ID match
- * instead, specifically to avoid this problem.
+ * Carousel slides: confirmed live 2026-08-04 against 9 real multi-slide
+ * posts that Instagram preloads carousel <img> elements directly into the
+ * DOM (a sliding window of ~2 slides around the current one) - no click
+ * needed to see them, and no new network request fires when advancing
+ * within that window (Playwright's response-interception approach used
+ * here originally never worked - confirmed live it returns exactly 1
+ * slide for a real carousel). Real slides are told apart from unrelated
+ * "more posts from this account" thumbnails (which share the same
+ * `alt="Photo by ..."` pattern) by matching the post's own date. See
+ * collectCarouselSlides() and docs/KNOWN_ISSUES.md for the full story,
+ * including why clicking "Next" needs `force: true` (Instagram's
+ * anonymous-visitor signup dialog overlaps the button).
  */
 export const playwrightTier: IMediaScraper = {
   tierName: "playwright",
@@ -137,8 +139,8 @@ export const playwrightTier: IMediaScraper = {
         ? { width: fullResImage.width, height: fullResImage.height }
         : { width: Number(meta.ogImageWidth) || 0, height: Number(meta.ogImageHeight) || 0 };
 
-      const mediaFamily = extractCdnPathFamily(meta.ogImage);
-      const slideImageUrls = await collectCarouselSlides(page, mediaFamily, primaryImageUrl);
+      const coverDate = extractCoverDate(meta.ogDescription);
+      const slideImageUrls = await collectCarouselSlides(page, coverDate, primaryImageUrl);
 
       // Video capture is only trusted for the single-media case. Carousel
       // slide collection is itself best-effort (see class doc comment), and
@@ -238,59 +240,119 @@ function extractMediaAssetId(cdnUrl: string): string | null {
   return match?.[1] ?? null;
 }
 
+const COVER_DATE_PATTERN = /\bon\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})/;
+
 /**
- * Coarse content-vs-avatar filter only: "t51.82787-15"-style paths mark
- * actual post-content images site-wide (as opposed to "t51.2885-19"-style
- * avatar/thumbnail assets), but this is NOT specific to any one post -
- * confirmed live that unrelated posts' images loaded elsewhere on the page
- * share the same family. See the carousel caveat in the class doc comment.
+ * og:description follows "N likes, M comments - username on <DATE>: ...".
+ * Used to tell this post's own carousel slides apart from unrelated
+ * "more posts from this account" thumbnails elsewhere on the page, which
+ * share the same alt-text pattern but a different date.
  */
-function extractCdnPathFamily(imageUrl: string): string | null {
-  const match = imageUrl.match(/\/(t51\.[\w-]+)\//);
-  return match?.[1] ?? null;
+function extractCoverDate(ogDescription: string | null): string | null {
+  if (!ogDescription) return null;
+  const match = ogDescription.match(COVER_DATE_PATTERN);
+  const rawDate = match?.[1];
+  return rawDate ? normalizeDateText(rawDate) : null;
 }
 
+/**
+ * Confirmed live 2026-08-04: og:description and <img alt> dates can
+ * disagree on zero-padding for the same post - "August 9, 2025" (from
+ * og:description) vs. "August 09, 2025" (from an <img alt>) - so an exact
+ * substring match silently drops real slides. Stripping a single leading
+ * zero from any day-of-month number normalizes both to the same text.
+ */
+function normalizeDateText(rawDate: string): string {
+  return rawDate.replace(/\b0(\d)\b/, "$1").replace(/,/g, "").trim().toLowerCase();
+}
+
+interface CarouselSlideCandidate {
+  url: string;
+  width: number;
+  height: number;
+  alt: string;
+}
+
+/**
+ * Reads whatever "Photo by .../Video by ..." <img> elements are currently
+ * in the DOM (Instagram preloads a window of carousel slides - confirmed
+ * live, see class doc comment) - unfiltered here so date-normalization
+ * (see normalizeDateText()) can run on the Node side against each
+ * candidate's own alt text, not inside the injected browser script.
+ */
+function readPostImages(page: Page): Promise<CarouselSlideCandidate[]> {
+  return page.evaluate<CarouselSlideCandidate[]>(`
+    Array.from(document.querySelectorAll("img"))
+      .filter((img) => /^Photo by |^Video by /.test(img.alt || ""))
+      .map((img) => ({ url: img.src, width: img.naturalWidth, height: img.naturalHeight, alt: img.alt }))
+  `);
+}
+
+function matchesCoverDate(alt: string, normalizedCoverDate: string): boolean {
+  const match = alt.match(COVER_DATE_PATTERN);
+  const rawDate = match?.[1];
+  return rawDate ? normalizeDateText(rawDate) === normalizedCoverDate : false;
+}
+
+/**
+ * Confirmed live 2026-08-04 against 9 real carousel posts: Instagram
+ * preloads carousel slide <img> elements straight into the DOM - no click
+ * needed to read the first ~2. Every real example found this session had
+ * exactly 2 slides, so clicking "Next" further (to test whether a sliding
+ * preload window reveals slide 3+) is implemented as a reasonable
+ * extrapolation but is NOT itself confirmed - flagged honestly in
+ * docs/KNOWN_ISSUES.md rather than claimed as verified.
+ *
+ * `force: true` on the click: Instagram's anonymous-visitor signup nudge
+ * dialog (role="dialog", "Sign up for Instagram to stay in the loop.")
+ * overlaps the Next button and blocks a normal click with a 30s
+ * actionability timeout - confirmed live via Playwright's own trace.
+ */
 async function collectCarouselSlides(
   page: Page,
-  mediaFamily: string | null,
+  coverDate: string | null,
   primaryImageUrl: string
 ): Promise<string[]> {
-  const slides = [primaryImageUrl];
-  if (!mediaFamily) return slides;
+  if (!coverDate) return [primaryImageUrl];
+  const normalizedCoverDate: string = coverDate;
 
-  for (let slideIndex = 0; slideIndex < MAX_CAROUSEL_SLIDES - 1; slideIndex++) {
-    const nextButton = page
-      .locator('[aria-label="Next" i][role="button"], button[aria-label="Next" i]')
-      .first();
+  const bestByAssetId = new Map<string, CarouselSlideCandidate>();
+  const assetOrder: string[] = [];
+
+  function mergeCandidates(candidates: CarouselSlideCandidate[]) {
+    for (const candidate of candidates) {
+      if (!matchesCoverDate(candidate.alt, normalizedCoverDate)) continue;
+
+      const assetId = extractMediaAssetId(candidate.url);
+      if (!assetId) continue;
+
+      const existing = bestByAssetId.get(assetId);
+      if (!existing) {
+        assetOrder.push(assetId);
+        bestByAssetId.set(assetId, candidate);
+      } else if (candidate.width * candidate.height > existing.width * existing.height) {
+        bestByAssetId.set(assetId, candidate);
+      }
+    }
+  }
+
+  mergeCandidates(await readPostImages(page));
+  if (assetOrder.length === 0) return [primaryImageUrl];
+
+  while (assetOrder.length < MAX_CAROUSEL_SLIDES) {
+    const nextButton = page.locator('button[aria-label="Next" i]').first();
     const isNextVisible = await nextButton.isVisible().catch(() => false);
     if (!isNextVisible) break;
 
-    const alreadyCaptured = new Set(slides);
-    let newSlideUrl: string | null = null;
-
-    const onResponse = (response: Response) => {
-      if (newSlideUrl) return;
-      const responseUrl = response.url();
-      const contentType = response.headers()["content-type"] ?? "";
-      if (
-        contentType.includes("image") &&
-        responseUrl.includes(mediaFamily) &&
-        !alreadyCaptured.has(responseUrl)
-      ) {
-        newSlideUrl = responseUrl;
-      }
-    };
-
-    page.on("response", onResponse);
-    await nextButton.click().catch(() => {});
+    await nextButton.click({ force: true }).catch(() => {});
     await page.waitForTimeout(SLIDE_CLICK_WAIT_MS);
-    page.off("response", onResponse);
 
-    if (!newSlideUrl) break;
-    slides.push(newSlideUrl);
+    const beforeCount = assetOrder.length;
+    mergeCandidates(await readPostImages(page));
+    if (assetOrder.length === beforeCount) break;
   }
 
-  return slides;
+  return assetOrder.map((assetId) => bestByAssetId.get(assetId)!.url);
 }
 
 const OG_DESCRIPTION_PATTERN = /-\s*([a-zA-Z0-9_.]+)\s+on\s+[^:]+:\s*"?([\s\S]*)$/;

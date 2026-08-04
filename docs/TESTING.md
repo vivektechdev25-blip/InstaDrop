@@ -31,7 +31,16 @@ Core Web Vitals: FCP 0.8s, CLS 0, TBT 20ms, Speed Index 0.8s — all comfortably
 
 **Also manually checked** (Playwright-driven, real browser, not just the automated audit): keyboard `Tab` order through the home page is logical (logo → nav links → theme toggle → URL input → paste button → footer links), and the disabled "Download" submit button correctly drops out of tab order until the field has a value.
 
+## Carousel extraction (2026-08-04)
+
+Verified live against **9 real, currently-public carousel posts** (sourced via web search, confirmed multi-slide via Playwright before testing) through the actual running API — not a code-review sign-off. All 9 returned the correct slide count, with correct/distinct/full-resolution URLs; downloaded and diffed both slides from one post to confirm they're genuinely different, complete, valid files. Two real bugs were found and fixed in the process (the original click-based mechanism never worked at all, and a date-format mismatch between two of Instagram's own metadata sources silently dropped a real slide) — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#carousel-support-fixed-and-verified-2026-08-04) for the full investigation. Not verified: carousels with 3+ slides or a video slide (no real example of either was found).
+
+## Private-account detection: blocked, not verified (2026-08-04)
+
+Genuinely could not be tested this session — not from lack of trying, but because private posts are by definition not publicly discoverable, so there's no real example to search for, and creating a throwaway Instagram account isn't possible in this environment (requires phone/email verification). Full explanation of what was tried and what's needed to unblock it: [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#private-account-detection-genuinely-blocked-not-just-didnt-get-to-it-2026-08-04).
+
 ## Known test gaps
 
-- Carousel extraction and private-account detection are implemented but not live-verified — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+- Private-account detection is implemented but not live-verified — blocked, see above.
+- Carousel posts with 3+ slides or a video slide within a carousel are unverified (no real example found).
 - No automated regression suite — every verification described in [CHANGELOG.md](./CHANGELOG.md) was a one-off manual/scripted check, not something that re-runs on future changes.

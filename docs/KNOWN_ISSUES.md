@@ -11,7 +11,7 @@
 | Instagram post URLs can include a username segment (`/natgeotv/reel/{shortcode}/`), not just the bare `/reel/{shortcode}/` form. The original validation regex only accepted the bare form and rejected real, valid URLs. | Both `apps/api/src/validators/fetchMediaSchema.ts` and `apps/web/src/lib/validators.ts` now accept an optional `/{username}/` prefix. |
 | Chromium's video-preload behavior fetches video in byte-range chunks (`bytestart`/`byteend` query params, not a standard HTTP `Range` header) rather than one full-file request. Capturing "the first video/mp4 response" can grab a tiny partial chunk (confirmed: a 247-byte fragment) instead of the full file. | Confirmed live that stripping `bytestart`/`byteend` from *any* captured chunk's URL and re-requesting it makes the CDN serve the complete file (verified via `curl -L`: valid, correctly-sized `.mp4`). `playwrightTier.ts` now does this unconditionally. |
 | My initial guess for the "post not found" page copy (`"Sorry, this page isn't available"`) was wrong for this specific route — confirmed by actually navigating to a real nonexistent shortcode. | Corrected to the real, live-observed copy: `"Post isn't available"`. |
-| The private-account detection string (`"This Account is Private"`) is **not** live-verified — no real private post could be sourced this session to test against, unlike every other path above. | Checking a couple of plausible phrasings as a hedge, but flagged in code (`playwrightTier.ts`) and here: needs real QA against an actual private post before being trusted. |
+| The private-account detection string (`"This Account is Private"`) is **not** live-verified — no real private post could be sourced, and genuinely can't be via search (see the dedicated section below). | Checking a couple of plausible phrasings as a hedge, but flagged in code (`playwrightTier.ts`) and here: needs real test data before being trusted. |
 
 ### Anonymous scraping tier test results (original investigation)
 
@@ -24,11 +24,26 @@ Live-tested against a confirmed-real, currently public Instagram post before cho
 | `GET /p/{shortcode}/embed/captioned/` | Same generic JS app shell as above, no media data |
 | Internal GraphQL persisted-query endpoint (`POST /graphql/query`, `doc_id`-based — what `instagram-url-direct` uses) | `200 OK` but GraphQL-level `"execution error"` — the persisted `doc_id` is stale/rotated or the query now requires an authenticated session |
 
-## Carousel support is unverified
+## Carousel support: fixed and verified 2026-08-04
 
-`playwrightTier.ts` collects carousel slides by clicking the "Next" control and capturing newly-loaded images from the same CDN path family as the cover image (`t51.XXXXX-15`-style path segment). This mechanism is built on individually-verified primitives, but no real multi-slide (carousel) public post could be sourced this session to test the click-and-capture loop end-to-end. Carousel posts currently fall back to image-only (no video-in-carousel support). **Needs QA against a real carousel post before being trusted.**
+Was unverified (no real carousel post available to test against), and the original mechanism (click "Next", capture newly-loaded images matching the cover's CDN path family) turned out to be fundamentally broken once real test data was found: it returned exactly **1 slide** for a confirmed real multi-slide post, every time.
 
-**Additional risk found 2026-08-04 while fixing the image-resolution gap below:** the CDN path family (`t51.XXXXX-15`) this carousel mechanism matches on is confirmed **not** specific to the current post — unrelated posts' images loaded elsewhere on the page (e.g. "more posts like this") share the same family. A real carousel post is needed to know whether this actually causes wrong images to get picked up as slides, or whether the "Next"-button-visible gate happens to prevent it in practice. Treat carousel output with real suspicion until QA'd.
+**Sourcing real test data:** found a public article specifically about viral Instagram carousels (via web search) with 27 embedded post URLs. Batch-checked each with Playwright for the presence of a "Next" carousel control — 9 confirmed real, currently-public, multi-slide carousel posts from 9 different accounts.
+
+**Root cause of the original break, found via live debugging (not guessed):**
+1. Playwright's `nextButton.click()` timed out after 30s — Chrome's actionability check reported "subtree intercepts pointer events." Traced the intercepting element: Instagram's own anonymous-visitor signup nudge dialog (`role="dialog"`, "Sign up for Instagram to stay in the loop.") sits on top of the Next button.
+2. Even with the click forced through (`{ force: true }`), **no new network request fired and no new image appeared in the DOM.** Traced this too: Instagram preloads carousel slide `<img>` elements directly into the DOM (a sliding window of ~2 slides around the current one) as part of the initial page render — there's nothing new to request when advancing within that window. The entire "click and capture the network response" premise was solving a problem that doesn't exist for this UI.
+
+**Actual fix — two parts:**
+1. **Read, don't click.** `collectCarouselSlides()` now reads whatever `<img alt="Photo by ...">` / `<img alt="Video by ...">` elements are already in the DOM, rather than waiting for a click to reveal anything.
+2. **Scope to this post only.** Those elements aren't unique to the current post — Instagram also renders "more posts from this account" thumbnails elsewhere on the page with the identical `alt` pattern (confirmed live: e.g. a 2025 post's cover sat alongside 9 unrelated thumbnails from mid-2026, all matching `/^Photo by /`). Real slides are told apart by matching the post's own date (extracted from `og:description`) against the date in each candidate's `alt` text.
+3. A click-and-reread loop (`force: true`, since the signup dialog blocks a normal click) still runs afterward in case a sliding preload window reveals more slides beyond the initial ~2 — implemented as a reasonable extrapolation from confirmed behavior, but genuinely unverified beyond 2 slides, since **all 9 real carousels found this session happened to have exactly 2 slides.** No 3+-slide example was available to test whether clicking actually advances the preload window or whether the loop just harmlessly exits (which is what happens for these 9).
+
+**A second real bug found while verifying the fix:** the first re-test (a different carousel post) still returned only 1 slide. Traced it: `og:description` said "August **9**, 2025" (no leading zero) while the matching `<img alt>` said "August **09**, 2025" (zero-padded) — a genuine formatting inconsistency between two of Instagram's own metadata sources for the same post. An exact substring match silently dropped the real second slide. Fixed with date normalization (strip a single leading zero, compare normalized) instead of raw substring matching.
+
+**Verified, all 9 real posts, after both fixes:** every one now returns exactly 2 media items — matching independently-confirmed DOM inspection counts — with correct, distinct, full-resolution URLs. Downloaded both slides from one post through the real `GET /api/v1/download` endpoint: two valid, complete, differently-hashed 1440×1920 JPEGs (not the same file twice, not corrupted). Single-image and video posts re-verified with zero regressions.
+
+**Still not verified:** carousels with 3+ slides (none found this session — see above), and carousels containing a video slide (Instagram's own default-shown JS example was image-only; the extraction only reads `<img>` elements, so a video slide within a carousel would currently be skipped rather than captured).
 
 ## Tier 2 (Playwright) image quality gap: fixed 2026-08-04
 
@@ -80,6 +95,20 @@ The previous audit flagged LCP at 2.2s against the spec's <1.5s target. Investig
 Under the *same* network/CPU conditions, actually applying the throttling (`devtools` method) instead of mathematically simulating it after the fact gives 1.475s — meeting the <1.5s target. No code was changed, because there was nothing to fix: no blocking font, no unoptimized hero image, no critical-CSS issue, no third-party script. The page is already about as lean as its functionality allows (React hydration + Tailwind + a handful of icons), and both the desktop and directly-throttled-mobile numbers confirm that.
 
 **Recommendation:** treat 1.475s (`devtools`, real throttling) as the representative number for this page rather than 2.2s (`simulate`, Lighthouse CLI's default). If a stricter reading of the target is wanted, revise it to "<1.5s under directly-applied mobile throttling equivalent to Lighthouse's default profile" rather than chasing Lighthouse CLI's `simulate` mode number specifically, since that mode's own model — not the page — is what's adding the extra ~700ms here.
+
+## Private-account detection: genuinely blocked, not just "didn't get to it" (2026-08-04)
+
+Unlike carousel support above, this one could not be resolved this session — explaining why in full, since "not live-tested" alone doesn't distinguish "ran out of time" from "structurally can't be done here."
+
+**Why this is different from carousel test data:** carousel posts are public, so a real example was findable via search (see above). Private posts are, by definition, not publicly indexed — no search engine crawls or lists them, so "search harder" cannot produce a real private post URL. This isn't a gap in effort; it's what "private" means.
+
+**Two genuine attempts made, both dead ends, for the record:**
+1. Searched directly for private post URLs / private-account references with post links — nothing, for the structural reason above.
+2. Searched for accounts reported as having *recently gone private* (on the theory that an old post URL, referenced in a news article from when the account was still public, might now resolve against a now-private account) — found general articles about Instagram's privacy features and celebrity anecdotes, but no article that happened to include the specific old permalink of an account that's since gone private.
+
+**Creating disposable test data was also considered and ruled out:** a throwaway Instagram account requires phone or email verification during signup, neither of which is available in this environment. Signup itself would also very plausibly hit the same anonymous-bot detection that blocks scraping in the first place (see the anonymous-scraping investigation above) — Instagram's signup flow is a prime target for exactly that kind of defense.
+
+**What would actually resolve this:** a real Instagram post URL from an account the user owns or controls that is currently set to private, or explicit confirmation that this stays undocumented/unverified until such an example becomes available. Not fabricating a test result either way.
 
 ## Structural limitations to keep in mind
 
