@@ -10,9 +10,9 @@ Active task list. Keep this current — remove items once shipped and note them 
 
 ## Day 2 — Backend parsing API
 - [x] Implement `scraperService.extractMedia` (multi-tier fallback pipeline) — Tier 1 `instagram-url-direct`, Tier 2 Playwright, see [ARCHITECTURE.md](./ARCHITECTURE.md#scraper-tiers-instagram-url-direct-fast-playwright-fallback)
-- [ ] Implement `downloadService.streamToResponse`
+- [x] Implement `downloadService.streamToResponse` — SSRF-guarded to Instagram CDN hosts only
 - [x] Verify `/api/v1/fetch` end-to-end against real public posts — image post and reel both confirmed live (real caption/author/media URL, video file downloads complete and valid); not-found path confirmed live (`INVALID_URL`); private-account path implemented but **not** live-verified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
-- [ ] Verify `/api/v1/download` end-to-end (endpoint not implemented yet)
+- [x] Verify `/api/v1/download` end-to-end — confirmed live for real image and video CDN URLs (correct headers, complete valid files); SSRF guard confirmed rejecting non-Instagram-CDN URLs
 - [ ] QA carousel extraction against a real multi-slide post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
 - [ ] QA private-account detection against a real private post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
 - [ ] Give `packages/types` a real build step before the API Dockerfile can actually run in production — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#deployment-gap-packagestypes-has-no-build-step)

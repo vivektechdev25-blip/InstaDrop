@@ -60,7 +60,9 @@ Binary streaming, proxies the media file straight to the browser.
 
 **Query params:** `url` (encoded CDN URL), `filename` (suggested download filename)
 
-Sets `Content-Disposition: attachment` to force download instead of inline playback. Media is never written to disk on the server.
+Sets `Content-Disposition: attachment` to force download instead of inline playback. Media is streamed directly from the upstream CDN response to the client response — never written to disk or buffered fully in memory on the server.
+
+**Security:** `url` is restricted to `*.cdninstagram.com` / `*.fbcdn.net` hostnames (enforced in `downloadMediaSchema.ts`) — without this, the endpoint would be an open proxy for arbitrary URLs (SSRF risk). A non-Instagram-CDN URL returns `400 INVALID_URL`.
 
 ## Frontend state machine
 
@@ -70,4 +72,4 @@ Sets `Content-Disposition: attachment` to force download instead of inline playb
 
 `POST /api/v1/fetch` is fully implemented and confirmed live end-to-end: real public image post, real public reel (video), a nonexistent-shortcode `INVALID_URL` case, and Zod request validation all return the correct response shape and real data where applicable. `PRIVATE_ACCOUNT` detection is implemented but not live-verified — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md). Carousel posts currently return image-only slides (video-in-carousel and the click-through slide collection itself are unverified against a real carousel).
 
-`GET /api/v1/download` is not implemented yet (`downloadService` is still a stub).
+`GET /api/v1/download` is fully implemented and confirmed live end-to-end: real image and real video (reel) downloads both return correct `Content-Type`/`Content-Disposition`/`Content-Length` and produce valid, complete files (verified with `file` — correct JPEG/MP4 signatures, matching byte sizes). The SSRF guard was also confirmed live: a non-Instagram-CDN URL is rejected with `400 INVALID_URL` before any upstream request is made.

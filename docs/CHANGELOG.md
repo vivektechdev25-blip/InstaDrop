@@ -8,19 +8,17 @@ All notable changes to this project are documented in this file.
 - Initial monorepo scaffolding: `apps/web` (Next.js), `apps/api` (Express), `packages/types` (shared DTOs)
 - Documentation set under `docs/`
 - Root workspace config (`pnpm-workspace.yaml`, shared `tsconfig.base.json`, `.gitignore`)
-
-### Changed
-- Rate limiting switched from Upstash Redis to `express-rate-limit` (in-memory), matching the MVP's single-instance Railway deployment. Removed `@upstash/redis` and `@upstash/ratelimit` dependencies and the corresponding env vars.
-
-### Added
 - Frontend shell: shadcn-style UI primitives (Button, Input, Card, Skeleton, Dialog, Toast/Toaster), persisted dark/light theme with anti-FOUC init script, mobile-first Navbar/Footer/MobileNav, hero section.
 - `InputForm` wired to a real `useInstagramDownloader` state machine (`IDLE -> VALIDATING -> FETCHING -> SUCCESS | ERROR | RATE_LIMITED`) calling the live `POST /api/v1/fetch` endpoint.
 - Shared `InstadropErrorCode` contract in `packages/types`; `AppError` class + `errorHandler` update on the API so every error response (Zod validation, domain errors, unexpected failures) includes a machine-readable `code`.
-
-### Added
 - Implemented `scraperService.extractMedia` as a two-tier fallback: `instagram-url-direct` (Tier 1, fast path) then Playwright headless Chromium (Tier 2, fallback). Confirmed live end-to-end against real public posts: image post, video/reel post, and a nonexistent-shortcode `INVALID_URL` case. Private-account detection is implemented but not live-verified (no real private post available to test against).
 - `AppError`-based error classification (`PRIVATE_ACCOUNT`, `INVALID_URL`, `SERVER_ERROR`) flows through `scraperService` so a tier that reaches a definitive answer short-circuits further fallback tiers.
 - `apps/api/Dockerfile` switched to the official `mcr.microsoft.com/playwright` base image (Chromium + all OS deps preinstalled) since Alpine can't reliably run Chromium; added root `.dockerignore`.
+- Implemented `downloadService.streamToResponse` (`GET /api/v1/download`) — proxy-streams the media file directly from the upstream CDN response to the client, setting `Content-Disposition: attachment` plus the correct `Content-Type`/`Content-Length`. Confirmed live end-to-end for both a real image and a real video CDN URL (valid, complete files verified with `file`).
+- SSRF guard on the download endpoint: `url` is restricted to `*.cdninstagram.com` / `*.fbcdn.net` hostnames via a Zod refinement, confirmed live to reject other hosts with `400 INVALID_URL`.
+
+### Changed
+- Rate limiting switched from Upstash Redis to `express-rate-limit` (in-memory), matching the MVP's single-instance Railway deployment. Removed `@upstash/redis` and `@upstash/ratelimit` dependencies and the corresponding env vars.
 
 ### Fixed
 - Instagram post URLs with a username segment (`/{username}/reel/{shortcode}/`) were rejected by the URL validation regex on both frontend and backend — now accepted.
