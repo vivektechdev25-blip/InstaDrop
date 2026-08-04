@@ -63,10 +63,14 @@ export function PreviewCard({ post }: PreviewCardProps) {
                     onClick={() => goToSlide(dotIndex)}
                     aria-label={`Go to slide ${dotIndex + 1}`}
                     aria-current={dotIndex === slideIndex}
-                    className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                      dotIndex === slideIndex ? "bg-primary" : "bg-background/60"
-                    }`}
-                  />
+                    className="flex h-6 w-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                        dotIndex === slideIndex ? "bg-primary" : "bg-background/60"
+                      }`}
+                    />
+                  </button>
                 ))}
               </div>
             </>

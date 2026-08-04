@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Download, Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { MobileNav } from "@/components/layout/MobileNav";
+
+// Pulls in framer-motion - not needed until a mobile visitor opens the
+// menu, so keep it out of the initial page bundle. Not needed for SSR
+// either (it's a client-only overlay).
+const MobileNav = dynamic(
+  () => import("@/components/layout/MobileNav").then((mod) => mod.MobileNav),
+  { ssr: false }
+);
 
 const NAV_LINKS = [
   { href: "/privacy-policy", label: "Privacy" },

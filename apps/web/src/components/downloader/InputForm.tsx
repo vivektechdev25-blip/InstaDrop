@@ -1,14 +1,22 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { ClipboardPaste, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { PreviewCard } from "@/components/downloader/PreviewCard";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useInstagramDownloader } from "@/hooks/useInstagramDownloader";
 import { useToast } from "@/hooks/useToast";
+
+// Not needed until a fetch actually succeeds - keep it out of the
+// initial page bundle rather than paying for the carousel/download-link
+// logic on every visit, most of which never reach SUCCESS.
+const PreviewCard = dynamic(
+  () => import("@/components/downloader/PreviewCard").then((mod) => mod.PreviewCard),
+  { ssr: false }
+);
 
 export function InputForm() {
   const [url, setUrl] = useState("");
@@ -67,7 +75,7 @@ export function InputForm() {
             type="button"
             onClick={handlePasteFromClipboard}
             aria-label="Paste from clipboard"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ClipboardPaste className="h-4 w-4" />
           </button>

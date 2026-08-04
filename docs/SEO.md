@@ -19,8 +19,8 @@ SEO is built in from day one, not an afterthought.
 
 ## Targets
 
-- Lighthouse SEO/Performance score > 95
-- LCP < 1.5s, FID < 100ms, CLS < 0.05 (see [ARCHITECTURE.md](./ARCHITECTURE.md) for how this is achieved)
+- Lighthouse SEO/Performance score > 95 — **achieved**: Performance 99, SEO 100, Accessibility 100, Best Practices 100 (real Lighthouse run against a production build, see [TESTING.md](./TESTING.md#lighthouse-audit-2026-08-04))
+- LCP < 1.5s, FID < 100ms, CLS < 0.05 — CLS 0 and TBT 20ms are comfortably within target, but measured LCP was 2.2s, above the 1.5s target despite the 99 overall Performance score. Likely explained by Lighthouse's default simulated mobile-network throttling (FCP 0.8s vs. LCP 2.2s on an otherwise very light page points to a throttled-network gap, not a heavy render), but not confirmed — flagged honestly rather than rounded up to "achieved." See [TODO.md](./TODO.md).
 
 ## Status
 

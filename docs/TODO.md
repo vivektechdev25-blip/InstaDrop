@@ -30,7 +30,10 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] `robots.txt` + `sitemap.xml` via Next.js file conventions, confirmed live with a production build (`next build && next start`)
 - [x] Per-page metadata for legal pages — added alongside their real content below
 - [x] Service worker + PWA installability — hand-rolled `sw.js` (network-first navigations, cache-first assets) + real icon files (manifest had `icons: []`, would have failed installability). Confirmed live: registers/activates with zero console errors, and actually tested offline (`setOffline(true)` + reload) — the real UI rendered from cache. See [SEO.md](./SEO.md#pwa) for what's confirmed vs. inferred (the literal "Add to Home Screen" prompt UI isn't testable headless).
-- [ ] Lighthouse audit pass (>95)
+- [x] Lighthouse audit pass (>95) — Performance 99, Accessibility 100, Best Practices 100, SEO 100 against a real production build. First run scored Accessibility 96 (16x16px icon-only "paste" button failed the 24x24px touch-target minimum); fixed that plus the same underlying issue in `PreviewCard`'s carousel dots, re-ran and confirmed 100. See [TESTING.md](./TESTING.md#lighthouse-audit-2026-08-04).
+- [ ] LCP measured at 2.2s, above the <1.5s target despite the 99 overall Performance score (CLS/TBT both excellent) — likely Lighthouse's simulated network throttling given how light the page is, but not confirmed. See [SEO.md](./SEO.md#targets).
+- [x] Dynamic imports for non-critical JS — `PreviewCard` (not needed until a fetch succeeds) and `MobileNav` (framer-motion, not needed until opened) both moved to `next/dynamic({ ssr: false })`. Confirmed via production build: home page First Load JS dropped from 165KB to 128KB (~22%).
+- [x] Keyboard nav + ARIA pass — confirmed via a real Lighthouse audit (100 accessibility) plus a manual Playwright-driven keyboard `Tab`-order check: logical order (logo → nav → theme toggle → URL input → paste button → footer), disabled submit button correctly excluded from tab order until the field has a value.
 
 ## Day 5 — QA, testing & deployment
 - [ ] Deploy `apps/web` to Vercel, `apps/api` to Railway
