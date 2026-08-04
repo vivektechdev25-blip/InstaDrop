@@ -12,6 +12,7 @@ export const rateLimiter = rateLimit({
       message: "Too many requests. Please try again later.",
       data: null,
       errors: null,
+      code: "RATE_LIMITED",
     });
   },
 });

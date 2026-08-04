@@ -22,7 +22,7 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts
 - [x] Loading skeletons + error toasts
 - [x] Build `PreviewCard` (video player, carousel swiper, per-slide download) and wire the real download trigger — confirmed live in an actual browser (Playwright screenshot) for both image and reel posts; carousel UI built but untestable until a real carousel post is found, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
-- [ ] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API
+- [x] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API — confirmed live: 12 rapid requests to `/api/v1/fetch` allowed the first 10 and returned `429` with `RateLimit-*`/`Retry-After` headers and `code: "RATE_LIMITED"` on requests 11-12
 
 ## Day 4 — SEO, PWA & performance
 - [ ] JSON-LD `WebApplication` schema

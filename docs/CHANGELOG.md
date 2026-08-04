@@ -22,6 +22,7 @@ All notable changes to this project are documented in this file.
 - Rate limiting switched from Upstash Redis to `express-rate-limit` (in-memory), matching the MVP's single-instance Railway deployment. Removed `@upstash/redis` and `@upstash/ratelimit` dependencies and the corresponding env vars.
 
 ### Fixed
+- The 429 rate-limit response was missing `code: "RATE_LIMITED"` (the rest of the API always includes a `code`, this handler was written by hand and missed it) — confirmed live by sending 12 rapid requests: the first 10 pass through, requests 11+ return `429` with the standard `RateLimit-*`/`Retry-After` headers and now the correct `code`.
 - Instagram post URLs with a username segment (`/{username}/reel/{shortcode}/`) were rejected by the URL validation regex on both frontend and backend — now accepted.
 - `page.evaluate()` closures threw `__name is not defined` under `tsx watch` (esbuild helper-injection artifact) — switched to string-based `evaluate()` calls.
 - Captured video URLs could point to a tiny partial byte-range chunk instead of the full file (Chromium's video-preload chunking) — now strips the range query params before returning the URL, confirmed to yield the complete file.
