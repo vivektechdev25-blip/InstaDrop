@@ -25,8 +25,10 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API — confirmed live: 12 rapid requests to `/api/v1/fetch` allowed the first 10 and returned `429` with `RateLimit-*`/`Retry-After` headers and `code: "RATE_LIMITED"` on requests 11-12
 
 ## Day 4 — SEO, PWA & performance
-- [ ] JSON-LD `WebApplication` schema
-- [ ] OG/Twitter card images
+- [x] JSON-LD `WebApplication` schema — confirmed live in the rendered `<head>`
+- [x] OG/Twitter card images — auto-generated via `opengraph-image.tsx`, confirmed live (valid 1200x630 PNG) and correctly wired into `og:image`/`twitter:image` meta tags
+- [x] `robots.txt` + `sitemap.xml` via Next.js file conventions, confirmed live with a production build (`next build && next start`)
+- [ ] Per-page metadata for legal pages (still inherits generic root metadata) — do alongside writing their real content
 - [ ] Service worker + PWA installability
 - [ ] Lighthouse audit pass (>95)
 

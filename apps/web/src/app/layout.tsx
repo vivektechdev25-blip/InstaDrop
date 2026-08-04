@@ -1,11 +1,36 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { siteConfig } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
-  title: "Instadrop — Instagram Photo & Video Downloader",
-  description:
-    "Download public Instagram photos, reels, videos, and carousel posts in original quality. No login required.",
+  metadataBase: new URL(siteConfig.url),
+  title: {
+    default: siteConfig.title,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.description,
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  manifest: "/manifest.json",
+  openGraph: {
+    type: "website",
+    url: siteConfig.url,
+    siteName: siteConfig.name,
+    title: siteConfig.title,
+    description: siteConfig.description,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteConfig.title,
+    description: siteConfig.description,
+  },
 };
 
 const THEME_INIT_SCRIPT = `
@@ -20,6 +45,21 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
+const APPLICATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: siteConfig.name,
+  description: siteConfig.description,
+  url: siteConfig.url,
+  applicationCategory: "MultimediaApplication",
+  operatingSystem: "Any",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -29,6 +69,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(APPLICATION_JSON_LD) }}
+        />
       </head>
       <body>
         <Providers>{children}</Providers>
