@@ -11,7 +11,7 @@
 | Instagram post URLs can include a username segment (`/natgeotv/reel/{shortcode}/`), not just the bare `/reel/{shortcode}/` form. The original validation regex only accepted the bare form and rejected real, valid URLs. | Both `apps/api/src/validators/fetchMediaSchema.ts` and `apps/web/src/lib/validators.ts` now accept an optional `/{username}/` prefix. |
 | Chromium's video-preload behavior fetches video in byte-range chunks (`bytestart`/`byteend` query params, not a standard HTTP `Range` header) rather than one full-file request. Capturing "the first video/mp4 response" can grab a tiny partial chunk (confirmed: a 247-byte fragment) instead of the full file. | Confirmed live that stripping `bytestart`/`byteend` from *any* captured chunk's URL and re-requesting it makes the CDN serve the complete file (verified via `curl -L`: valid, correctly-sized `.mp4`). `playwrightTier.ts` now does this unconditionally. |
 | My initial guess for the "post not found" page copy (`"Sorry, this page isn't available"`) was wrong for this specific route — confirmed by actually navigating to a real nonexistent shortcode. | Corrected to the real, live-observed copy: `"Post isn't available"`. |
-| The private-account detection string (`"This Account is Private"`) is **not** live-verified — no real private post could be sourced, and genuinely can't be via search (see the dedicated section below). | Checking a couple of plausible phrasings as a hedge, but flagged in code (`playwrightTier.ts`) and here: needs real test data before being trusted. |
+| The private-account detection string (`"This Account is Private"`) is **implemented, not yet live-verified — confirmed non-blocking, not a launch gate** (see the dedicated section below). | Checking a couple of plausible phrasings as a hedge, flagged in code (`playwrightTier.ts`) and here. Low risk either way: worst case if the marker string doesn't match a real private-account page, the request doesn't return private content or wrong data — it just falls through to a generic `SERVER_ERROR` instead of the friendlier `PRIVATE_ACCOUNT` message (based on reading the code's logic, not live-confirmed for this specific case). Revisit when real test data becomes available. |
 
 ### Anonymous scraping tier test results (original investigation)
 
@@ -96,7 +96,9 @@ Under the *same* network/CPU conditions, actually applying the throttling (`devt
 
 **Recommendation:** treat 1.475s (`devtools`, real throttling) as the representative number for this page rather than 2.2s (`simulate`, Lighthouse CLI's default). If a stricter reading of the target is wanted, revise it to "<1.5s under directly-applied mobile throttling equivalent to Lighthouse's default profile" rather than chasing Lighthouse CLI's `simulate` mode number specifically, since that mode's own model — not the page — is what's adding the extra ~700ms here.
 
-## Private-account detection: genuinely blocked, not just "didn't get to it" (2026-08-04)
+## Private-account detection: unverified, confirmed non-blocking (2026-08-04)
+
+**Decision (2026-08-04):** confirmed with the user that this stays documented as unverified rather than launch-blocking. Rationale: private accounts are rejected either way (worst case, an unrecognized private page falls through to a generic `SERVER_ERROR` instead of the specific `PRIVATE_ACCOUNT` message — no content leaks, no wrong data returned). Revisit only when a real private test URL becomes available; not gating deployment on it.
 
 Unlike carousel support above, this one could not be resolved this session — explaining why in full, since "not live-tested" alone doesn't distinguish "ran out of time" from "structurally can't be done here."
 
@@ -108,7 +110,7 @@ Unlike carousel support above, this one could not be resolved this session — e
 
 **Creating disposable test data was also considered and ruled out:** a throwaway Instagram account requires phone or email verification during signup, neither of which is available in this environment. Signup itself would also very plausibly hit the same anonymous-bot detection that blocks scraping in the first place (see the anonymous-scraping investigation above) — Instagram's signup flow is a prime target for exactly that kind of defense.
 
-**What would actually resolve this:** a real Instagram post URL from an account the user owns or controls that is currently set to private, or explicit confirmation that this stays undocumented/unverified until such an example becomes available. Not fabricating a test result either way.
+**What would resolve this in the future:** a real Instagram post URL from an account the user owns or controls that is currently set to private. Until then, this stays documented as unverified — confirmed as an acceptable, non-blocking state rather than something to fabricate a test result for.
 
 ## Structural limitations to keep in mind
 
