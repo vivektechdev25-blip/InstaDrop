@@ -2,7 +2,7 @@
 
 Base URL: `/api/v1`
 
-All responses use a consistent envelope:
+All responses use a consistent envelope. Error responses additionally carry a machine-readable `code` (`INVALID_URL`, `PRIVATE_ACCOUNT`, `RATE_LIMITED`, `SERVER_ERROR`) so the frontend can branch without string-matching `message`:
 
 ```json
 {
@@ -45,8 +45,10 @@ Media extraction from a public Instagram URL.
 ```json
 {
   "success": false,
-  "error": "PRIVATE_ACCOUNT",
-  "message": "This content is from a private Instagram account and cannot be processed."
+  "message": "This content is from a private Instagram account and cannot be processed.",
+  "data": null,
+  "errors": null,
+  "code": "PRIVATE_ACCOUNT"
 }
 ```
 
@@ -66,4 +68,4 @@ Sets `Content-Disposition: attachment` to force download instead of inline playb
 
 ## Implementation status
 
-Routes and controllers are scaffolded in `apps/api/src/routes` and `apps/api/src/controllers`; the scraper and download services (`apps/api/src/services`) are stubs pending Day 2 implementation.
+Routes, controllers, validators, and the error envelope are fully wired and confirmed working end-to-end via `curl` — both a Zod validation failure (`INVALID_URL`) and the stubbed `scraperService` throwing (`SERVER_ERROR`) return the correct response shape. The scraper and download services (`apps/api/src/services`) themselves are still stubs — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for why `scraperService.extractMedia` is currently blocked.

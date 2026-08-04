@@ -2,12 +2,12 @@
 
 ## MVP scope (5-day target)
 
-- [ ] Single photo/video/reel/carousel URL parsing
+- [ ] Single photo/video/reel/carousel URL parsing — blocked on scraper strategy, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
 - [ ] Direct CDN link retrieval
 - [ ] Media preview player
-- [ ] Responsive dark/light UI
+- [x] Responsive dark/light UI
 - [ ] Serverless edge API
-- [ ] Distributed rate limiting
+- [x] Rate limiting (in-memory `express-rate-limit` for MVP — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp))
 - [ ] Complete SEO setup
 
 ## Explicitly out of MVP scope (post-MVP roadmap)
