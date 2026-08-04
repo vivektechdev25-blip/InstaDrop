@@ -16,6 +16,15 @@ See `.env.example` in each app:
 
 Never commit real `.env` files — they are gitignored.
 
+## Building the API image locally
+
+```bash
+docker build -f apps/api/Dockerfile -t instadrop-api:test .
+docker run --rm -p 4000:4000 instadrop-api:test
+```
+
+Build context must be the repo root (not `apps/api/`) — the Dockerfile copies `packages/types` and root `config/` into its `deps` stage. Confirmed working locally 2026-08-04, including a real request through the running container (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the bugs that surfaced getting here).
+
 ## Pre-production readiness checklist
 
 - [ ] All environment variables populated on Vercel & Railway

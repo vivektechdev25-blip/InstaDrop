@@ -11,20 +11,38 @@ RUN corepack enable
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 FROM base AS deps
-COPY pnpm-workspace.yaml package.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
-COPY packages/types/package.json ./packages/types/package.json
+# Full directory, not just package.json: packages/types has a "prepare"
+# script that runs `tsc` during install (see its package.json), which
+# needs tsconfig.json + src/ already present - confirmed live that a
+# package.json-only copy here fails with "path does not exist: tsconfig.json".
+COPY packages/types ./packages/types
+# packages/types/tsconfig.json extends this - also needed before the
+# "prepare" script's tsc invocation runs during install.
+COPY config ./config
 RUN pnpm install --frozen-lockfile
 
 FROM base AS build
 COPY --from=deps /app /app
 COPY . .
-RUN pnpm --filter @instadrop/api build
+# "..." pulls in @instadrop/api's workspace dependencies (@instadrop/types)
+# so pnpm builds it first - apps/api's own build needs packages/types/dist
+# to already exist to resolve types/JS for the compiled output.
+RUN pnpm --filter "@instadrop/api..." build
 
 FROM base AS runner
 ENV NODE_ENV=production
-COPY --from=build /app/apps/api/dist ./dist
-COPY --from=build /app/apps/api/package.json ./package.json
+# pnpm gives each workspace package its own node_modules full of symlinks
+# into the shared /app/node_modules/.pnpm store (e.g.
+# apps/api/node_modules/express -> ../../../node_modules/.pnpm/express@.../...) -
+# those are relative symlinks, so flattening apps/api/dist to /app/dist
+# breaks module resolution ("Cannot find module 'express'", confirmed
+# live). Preserving the real monorepo path depth keeps them resolvable.
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+WORKDIR /app/apps/api
 EXPOSE 4000
 CMD ["node", "dist/app.js"]

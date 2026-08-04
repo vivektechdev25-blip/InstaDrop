@@ -15,8 +15,8 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Verify `/api/v1/download` end-to-end — confirmed live for real image and video CDN URLs (correct headers, complete valid files); SSRF guard confirmed rejecting non-Instagram-CDN URLs
 - [ ] QA carousel extraction against a real multi-slide post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
 - [ ] QA private-account detection against a real private post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
-- [ ] Give `packages/types` a real build step before the API Dockerfile can actually run in production — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#deployment-gap-packagestypes-has-no-build-step)
-- [ ] Fix Tier 2 (Playwright) image resolution: currently returns Instagram's cropped `og:image` thumbnail, not the original — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#tier-2-playwright-image-quality-gap-ogimage-is-a-pre-cropped-thumbnail)
+- [x] Give `packages/types` a real build step before the API Dockerfile can actually run in production — `tsc` now emits to `dist/`, `main`/`types` point there, a `prepare` script builds it automatically on `pnpm install`. Confirmed live: `docker build` succeeds and the built container actually runs and serves real requests (Zod, `@instadrop/types` resolution, and Playwright/Chromium scraping a real Instagram URL all confirmed working inside the container) — took four rounds of real bugs found via `docker build`/`docker run`, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+- [x] Fix Tier 2 (Playwright) image resolution — confirmed live: recovered 1350x1688 (340KB) from what was a 640x640 (25KB) cropped `og:image`, verified by downloading the actual file and checking its real pixel dimensions. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#tier-2-playwright-image-quality-gap-fixed-2026-08-04)
 
 ## Day 3 — Client integration & security
 - [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts

@@ -28,17 +28,35 @@ Live-tested against a confirmed-real, currently public Instagram post before cho
 
 `playwrightTier.ts` collects carousel slides by clicking the "Next" control and capturing newly-loaded images from the same CDN path family as the cover image (`t51.XXXXX-15`-style path segment). This mechanism is built on individually-verified primitives, but no real multi-slide (carousel) public post could be sourced this session to test the click-and-capture loop end-to-end. Carousel posts currently fall back to image-only (no video-in-carousel support). **Needs QA against a real carousel post before being trusted.**
 
-## Tier 2 (Playwright) image quality gap: `og:image` is a pre-cropped thumbnail
+**Additional risk found 2026-08-04 while fixing the image-resolution gap below:** the CDN path family (`t51.XXXXX-15`) this carousel mechanism matches on is confirmed **not** specific to the current post — unrelated posts' images loaded elsewhere on the page (e.g. "more posts like this") share the same family. A real carousel post is needed to know whether this actually causes wrong images to get picked up as slides, or whether the "Next"-button-visible gate happens to prevent it in practice. Treat carousel output with real suspicion until QA'd.
 
-Confirmed live via an actual browser screenshot of the rendered `PreviewCard`: for image posts served through the Playwright fallback tier, the image looks cropped in a way CSS `object-contain` doesn't fix. Traced to the source: Instagram's `og:image` URL itself carries a crop instruction in its query string (e.g. `stp=c270.0.810.810a_dst-jpg_e35_s640x640...`) — it's Instagram's own square feed-thumbnail rendition, not the original full-resolution image. This means **Tier 2 downloads currently do not meet the "original-resolution, no re-compression" requirement** ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) for image posts - only Tier 1 (`instagram-url-direct`, which reads the real `display_url` from Instagram's own API response) does.
+## Tier 2 (Playwright) image quality gap: fixed 2026-08-04
 
-**Improvement path (not implemented):** during the initial page load, Playwright already sees multiple same-CDN-family (`t51.XXXXX-15`) image responses at different resolutions (Instagram loads several `srcset` renditions). Capturing all of them and keeping the largest instead of relying solely on the `og:image` meta tag should recover full resolution — needs live verification before shipping.
+Was: for image posts served through the Playwright fallback tier, `og:image`'s URL carries a crop instruction in its query string (e.g. `stp=c270.0.810.810a_dst-jpg_e35_s640x640...`) — Instagram's own square feed-thumbnail rendition, not the original. Confirmed live via a browser screenshot of the rendered `PreviewCard` before investigating further.
 
-## Deployment gap: `packages/types` has no build step
+The originally-proposed fix in this doc ("capture same-CDN-family image responses during page load, keep the largest") turned out to be **wrong** — live-tested and found that same-family responses are unrelated posts' thumbnails (sidebar "more like this" content), not different resolutions of the same photo (see the carousel risk above — same underlying flaw).
 
-`packages/types/package.json` points `main`/`types` at raw `src/index.ts`. This works during development (Next.js and `tsx` both handle `.ts` imports directly via workspace symlinks), but a compiled production `node dist/app.js` process cannot `require()` a raw `.ts` file. `apps/api`'s Dockerfile will not actually run until `packages/types` gets a real build step (e.g. `tsup`/`tsc` emitting to `dist/`, with `main`/`types` pointed there). Not fixed yet — flagged for the Day 5 deployment work in [TODO.md](./TODO.md).
+**Actual fix:** the real full-resolution image already exists in the rendered page as a normal `<img>` element (Instagram's own accessible `alt="Photo by X on DATE."` image), sharing the same CDN *media ID* (not path family) as `og:image` — the numeric `{assetId}_{containerId}` prefix in the filename. `findFullResolutionImage()` in `playwrightTier.ts` matches on that ID and picks the largest (`naturalWidth × naturalHeight`) matching `<img>` element. Confirmed live end-to-end: recovered a 1350×1688 (340KB) original from what was a 640×640 (25KB) cropped thumbnail, verified by downloading the actual file through `GET /api/v1/download` and checking its real pixel dimensions.
+
+Falls back to `og:image` when no DOM match is found — the expected case for video posts, where the real deliverable is the captured video file and the thumbnail is secondary.
+
+## Deployment gap: `packages/types` build step — fixed 2026-08-04
+
+Was: `packages/types/package.json` pointed `main`/`types` at raw `src/index.ts`, which worked in dev (Next.js and `tsx` both handle `.ts` imports directly via workspace symlinks) but a compiled production `node dist/app.js` process cannot `require()` a raw `.ts` file.
+
+**Fix:** `packages/types` now builds with `tsc` to `dist/` (`main`/`types` point there), with a `prepare` script so `pnpm install` builds it automatically — local dev keeps working without an extra manual step.
+
+Getting the Dockerfile to actually build and run with this took four rounds of live `docker build`/`docker run` testing, each surfacing a real bug that pure code review wouldn't have caught:
+
+| Bug found live | Fix |
+|---|---|
+| `deps` stage never copied `pnpm-lock.yaml` at all — `pnpm install --frozen-lockfile` failed immediately with `ERR_PNPM_NO_LOCKFILE`. Pre-existing since the original scaffold, not something introduced by this change. | Added `pnpm-lock.yaml` to the `deps` stage's initial `COPY`. |
+| The new `packages/types` `prepare` script runs `tsc` during `pnpm install`, but the `deps` stage only ever copied `package.json` files (intentional Docker layer-caching pattern) — no `tsconfig.json`/`src/` present, so `tsc` failed with `TS5058: path does not exist`. | Copy the *whole* `packages/types` directory into the `deps` stage instead of just its `package.json`. |
+| `packages/types/tsconfig.json` extends `../../config/tsconfig.base.json`, which also wasn't in the `deps` stage yet — `tsc` failed with `TS5083: Cannot read file`. | Also `COPY config ./config` into the `deps` stage before `pnpm install` runs. |
+| Runner stage flattened `apps/api/dist` to `/app/dist` and only copied root `/app/node_modules`. But pnpm gives each workspace package its own `node_modules` full of **relative** symlinks into the shared `.pnpm` store (e.g. `apps/api/node_modules/express -> ../../../node_modules/.pnpm/express@.../...`) — flattening broke that relative path, so the container crashed on boot with `Error: Cannot find module 'express'`. | Preserve the real monorepo path depth in the runner stage: copy to `/app/apps/api/dist`, copy `/app/apps/api/node_modules` (the symlinks) *and* `/app/node_modules` (the actual store) both, `WORKDIR /app/apps/api`, run `node dist/app.js` from there. |
+
+**Verified, not just "builds without error":** after the fourth fix, ran the actual container (`docker run`) and sent real HTTP requests through it — Zod validation, `@instadrop/types` workspace resolution, and Playwright/Chromium launching and scraping a real Instagram URL from inside the container all confirmed working end-to-end.
 
 ## Structural limitations to keep in mind
 
-- `apps/api/src/services/downloadService.ts` is still a stub — the binary download endpoint (`GET /api/v1/download`) is not implemented yet.
 - Instagram's DOM/API can change without notice — both scraper tiers are inherently fragile to Instagram-side changes; this is exactly why the tier system exists rather than depending on one technique.
