@@ -1,0 +1,10 @@
+{
+  "name": "Instadrop",
+  "short_name": "Instadrop",
+  "description": "Download public Instagram photos, reels, videos, and carousel posts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": []
+}
