@@ -8,7 +8,11 @@ import { closeBrowser } from "./services/scrapers/browserManager";
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+// Defaults to localhost, not a wildcard - an unset CORS_ORIGIN in
+// production fails safe (blocks the real frontend, loudly and
+// immediately obvious) rather than failing open (silently allowing any
+// origin).
+app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" }));
 app.use(express.json());
 
 app.use("/api/v1", apiRouter);

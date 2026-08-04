@@ -18,6 +18,14 @@ Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-mem
 
 `GET /api/v1/download` proxy-streams whatever `url` it's given. Without a check, that makes it an open proxy — the API would fetch and relay *any* URL a caller supplies, which could be pointed at internal infrastructure or used to mask the origin of unrelated requests. `downloadMediaSchema.ts` restricts `url` to `*.cdninstagram.com` / `*.fbcdn.net` hostnames before the API ever makes the upstream request. Confirmed live: a non-Instagram-CDN URL is rejected with `400 INVALID_URL`.
 
+## CORS
+
+`app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" }))` in `apps/api/src/app.ts`. Found live while preparing for deployment: `CORS_ORIGIN` was documented in `.env.example` but the code was calling `cors()` with **no arguments at all** — the `cors` package's default is to allow every origin (`Access-Control-Allow-Origin: *`), silently contradicting the documented config. Fixed to actually read the env var.
+
+Defaults to `http://localhost:3000` (not a wildcard) when unset, so a missing `CORS_ORIGIN` in production fails safe — it blocks the real frontend (loudly, obviously broken) rather than failing open (silently allowing any origin). **Production deployment must set `CORS_ORIGIN` to the exact deployed frontend domain** — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+Confirmed live: a disallowed `Origin` gets back a response whose `Access-Control-Allow-Origin` doesn't match its own origin, which is what causes browsers to block the response from being read by that origin's JavaScript (the standard mechanism this middleware relies on — the server doesn't refuse the request outright, the browser enforces the mismatch).
+
 ## Private account handling
 
 ### MVP behavior (public accounts only)
