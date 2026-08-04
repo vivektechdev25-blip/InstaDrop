@@ -31,7 +31,7 @@ Build context must be the repo root (not `apps/api/`) — the Dockerfile copies 
 - [ ] CORS domains locked strictly to production domain
 - [ ] Rate limiting verified active via load testing
 - [ ] Lighthouse SEO/Performance score audited above 95
-- [ ] Legal static pages (Privacy, Terms, Contact) active
+- [ ] Legal static pages (Privacy, Terms, Contact) active — content written and confirmed rendering correctly in a local production build ([TODO.md](./TODO.md)); this item tracks them being live on the deployed domain
 - [ ] Documentation files complete and current
 - [ ] No secrets committed to git history
 - [ ] Session-cookie handling audited (if private account feature shipped)

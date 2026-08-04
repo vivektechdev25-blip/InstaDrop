@@ -28,7 +28,7 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] JSON-LD `WebApplication` schema — confirmed live in the rendered `<head>`
 - [x] OG/Twitter card images — auto-generated via `opengraph-image.tsx`, confirmed live (valid 1200x630 PNG) and correctly wired into `og:image`/`twitter:image` meta tags
 - [x] `robots.txt` + `sitemap.xml` via Next.js file conventions, confirmed live with a production build (`next build && next start`)
-- [ ] Per-page metadata for legal pages (still inherits generic root metadata) — do alongside writing their real content
+- [x] Per-page metadata for legal pages — added alongside their real content below
 - [x] Service worker + PWA installability — hand-rolled `sw.js` (network-first navigations, cache-first assets) + real icon files (manifest had `icons: []`, would have failed installability). Confirmed live: registers/activates with zero console errors, and actually tested offline (`setOffline(true)` + reload) — the real UI rendered from cache. See [SEO.md](./SEO.md#pwa) for what's confirmed vs. inferred (the literal "Add to Home Screen" prompt UI isn't testable headless).
 - [ ] Lighthouse audit pass (>95)
 
