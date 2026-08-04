@@ -42,10 +42,21 @@ interface PageMeta {
  * curl gets stonewalled with a login-walled JS shell, but a real browser
  * context gets the genuine server-rendered tags (see docs/KNOWN_ISSUES.md).
  *
+ * For image posts, og:image itself is only Instagram's cropped feed
+ * thumbnail - findFullResolutionImage() swaps in the real-resolution
+ * rendition by matching CDN media IDs against the page's actual <img>
+ * elements. Confirmed live: recovered 1350x1688 from a 640x640 og:image.
+ *
  * Carousel slide collection (clicking "Next" and capturing newly-loaded
  * images from the same CDN path family as the cover image) is implemented
  * but NOT live-verified against a real multi-image post - flagged as a
- * known limitation until QA'd against one.
+ * known limitation until QA'd against one. Worth noting while investigating
+ * the image-resolution fix above: the CDN path family (e.g. "t51.82787-15")
+ * used for that matching is NOT specific to this post - it's shared by
+ * unrelated posts' images loaded elsewhere on the page (confirmed live),
+ * so this carousel mechanism is on shakier ground than it looks. The
+ * full-resolution fix above uses a tighter per-asset media ID match
+ * instead, specifically to avoid this problem.
  */
 export const playwrightTier: IMediaScraper = {
   tierName: "playwright",
@@ -111,13 +122,23 @@ export const playwrightTier: IMediaScraper = {
         throw new Error("No og:image found on the rendered page.");
       }
 
-      const mediaFamily = extractCdnPathFamily(meta.ogImage);
-      const slideImageUrls = await collectCarouselSlides(page, mediaFamily, meta.ogImage);
+      // og:image is Instagram's cropped, fixed-size (e.g. 640x640) feed
+      // thumbnail, not the original - confirmed live: stripping its `stp`
+      // crop/resize query param doesn't help either, since it's covered by
+      // the URL's signature ("URL signature mismatch" on removal). The
+      // actual full-resolution image is rendered on the page as a real
+      // <img> element sharing the same CDN media ID - swap to that when we
+      // can find it. Falls back to og:image when we can't (e.g. video
+      // posts, where the real deliverable is the captured video file and
+      // this thumbnail is secondary anyway).
+      const fullResImage = await findFullResolutionImage(page, meta.ogImage);
+      const primaryImageUrl = fullResImage?.url ?? meta.ogImage;
+      const dimensions = fullResImage
+        ? { width: fullResImage.width, height: fullResImage.height }
+        : { width: Number(meta.ogImageWidth) || 0, height: Number(meta.ogImageHeight) || 0 };
 
-      const dimensions = {
-        width: Number(meta.ogImageWidth) || 0,
-        height: Number(meta.ogImageHeight) || 0,
-      };
+      const mediaFamily = extractCdnPathFamily(meta.ogImage);
+      const slideImageUrls = await collectCarouselSlides(page, mediaFamily, primaryImageUrl);
 
       // Video capture is only trusted for the single-media case. Carousel
       // slide collection is itself best-effort (see class doc comment), and
@@ -163,12 +184,6 @@ async function readPageMeta(page: Page): Promise<PageMeta> {
   `);
 }
 
-/**
- * Instagram's og:image URLs use a CDN path segment like "t51.82787-15" for
- * actual post-content images, distinct from smaller "t51.2885-19"-style
- * avatar/thumbnail assets also loaded on the page - confirmed by comparing
- * a live og:image URL against the ~10 other image responses the page loads.
- */
 function stripByteRangeParams(videoUrl: string): string {
   const parsed = new URL(videoUrl);
   parsed.searchParams.delete("bytestart");
@@ -176,6 +191,60 @@ function stripByteRangeParams(videoUrl: string): string {
   return parsed.toString();
 }
 
+interface FullResImageMatch {
+  url: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * Finds the real, uncropped rendition of the post's cover image by
+ * matching the CDN media ID shared between og:image and the actual <img>
+ * element Instagram renders for the post (e.g. alt="Photo by X on DATE.").
+ * Confirmed live 2026-08-04: for a post whose og:image was a 640x640
+ * crop, this found the same asset rendered at 1350x1688 (its real
+ * resolution) via a matching media ID in the src. Returns null if no DOM
+ * match is found (e.g. video posts, where the post's <img> isn't the
+ * cover photo) - callers should fall back to og:image in that case.
+ */
+async function findFullResolutionImage(
+  page: Page,
+  ogImageUrl: string
+): Promise<FullResImageMatch | null> {
+  const mediaId = extractMediaAssetId(ogImageUrl);
+  if (!mediaId) return null;
+
+  const candidates = await page.evaluate<FullResImageMatch[]>(`
+    Array.from(document.querySelectorAll("img"))
+      .filter((img) => img.src.includes(${JSON.stringify(mediaId)}))
+      .map((img) => ({ url: img.src, width: img.naturalWidth, height: img.naturalHeight }))
+  `);
+
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((largest, candidate) =>
+    candidate.width * candidate.height > largest.width * largest.height ? candidate : largest
+  );
+}
+
+/**
+ * Instagram CDN image filenames look like {assetId}_{containerId}_{hash}_n.jpg
+ * - the same two leading numeric segments are shared across every
+ * resolution/crop rendition of the same underlying photo.
+ */
+function extractMediaAssetId(cdnUrl: string): string | null {
+  const filename = new URL(cdnUrl).pathname.split("/").pop() ?? "";
+  const match = filename.match(/^(\d+_\d+)_/);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Coarse content-vs-avatar filter only: "t51.82787-15"-style paths mark
+ * actual post-content images site-wide (as opposed to "t51.2885-19"-style
+ * avatar/thumbnail assets), but this is NOT specific to any one post -
+ * confirmed live that unrelated posts' images loaded elsewhere on the page
+ * share the same family. See the carousel caveat in the class doc comment.
+ */
 function extractCdnPathFamily(imageUrl: string): string | null {
   const match = imageUrl.match(/\/(t51\.[\w-]+)\//);
   return match?.[1] ?? null;
