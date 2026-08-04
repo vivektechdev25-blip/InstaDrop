@@ -18,6 +18,8 @@
     "express": "^4.19.0",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
+    "instagram-url-direct": "^2.0.7",
+    "playwright": "1.62.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {

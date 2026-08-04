@@ -4,7 +4,7 @@ export const fetchMediaSchema = z.object({
   url: z
     .string()
     .url()
-    .regex(/^https?:\/\/(www\.)?instagram\.com\/(p|reel|tv)\/[a-zA-Z0-9_-]+\/?/, {
+    .regex(/^https?:\/\/(www\.)?instagram\.com\/(?:[a-zA-Z0-9_.]+\/)?(p|reel|tv)\/[a-zA-Z0-9_-]+\/?/, {
       message: "URL must be a public Instagram post, reel, or IGTV link.",
     }),
 });
