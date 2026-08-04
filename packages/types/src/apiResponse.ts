@@ -1,3 +1,5 @@
+import type { InstadropErrorCode } from "./errors";
+
 export interface ApiSuccessResponse<TData> {
   success: true;
   message: string;
@@ -10,6 +12,7 @@ export interface ApiErrorResponse {
   message: string;
   data: null;
   errors: Record<string, string[]> | null;
+  code?: InstadropErrorCode;
 }
 
 export type ApiResponse<TData> = ApiSuccessResponse<TData> | ApiErrorResponse;

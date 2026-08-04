@@ -4,3 +4,16 @@ const INSTAGRAM_URL_PATTERN =
 export function isValidInstagramUrl(url: string): boolean {
   return INSTAGRAM_URL_PATTERN.test(url.trim());
 }
+
+/**
+ * Strips tracking params (e.g. ?igsh=...) and hash fragments, normalizing
+ * to a bare https://www.instagram.com/{p|reel|tv}/{shortcode}/ URL.
+ */
+export function cleanInstagramUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    return `https://www.instagram.com${parsed.pathname}`;
+  } catch {
+    return rawUrl.trim();
+  }
+}

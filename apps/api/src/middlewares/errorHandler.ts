@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
+import { AppError } from "../errors/AppError";
 
 export function errorHandler(
   error: unknown,
@@ -13,6 +14,17 @@ export function errorHandler(
       message: "Invalid request.",
       data: null,
       errors: error.flatten().fieldErrors,
+      code: "INVALID_URL",
+    });
+  }
+
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+      data: null,
+      errors: null,
+      code: error.code,
     });
   }
 
@@ -23,5 +35,6 @@ export function errorHandler(
     message: "Something went wrong. Please try again.",
     data: null,
     errors: null,
+    code: "SERVER_ERROR",
   });
 }
