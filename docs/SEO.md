@@ -31,3 +31,16 @@ Implemented and confirmed live (production build + `next start`, not just typech
 - Home page `<head>` — canonical `<link>`, full `og:*`/`twitter:*` tags (including the auto-wired image), and valid `WebApplication` JSON-LD, all confirmed present in the actual rendered HTML
 
 Per-page metadata for the legal pages is still generic (inherits the root layout's title/description) — will be filled in alongside their real content ([TODO.md](./TODO.md)).
+
+## PWA
+
+- `apps/web/public/manifest.json` — name, icons (192/512 PNG + a maskable 512 variant, generated to match the brand mark), `display: standalone`, theme/background colors.
+- `apps/web/public/sw.js` — hand-rolled service worker (not a library): network-first for navigations (always latest when online, falls back to the cached shell offline), cache-first for everything else (JS/CSS chunks, icons), populating the cache as assets are fetched.
+- `apps/web/src/hooks/useServiceWorker.ts` registers it, gated to production only (service workers fight with dev-mode hot-reload, a well-known footgun — confirmed intentional, not an oversight).
+
+**Confirmed live** (production build, real Chromium via Playwright, not just code review):
+- Service worker registers and reaches `activated` state, zero console errors
+- App shell (`/`, JS/CSS chunks, prefetched legal pages) actually populates the cache
+- **Actually went offline** (`context.setOffline(true)`) and reloaded — the real UI still rendered from cache, not just an inference from "the code looks right"
+
+Not independently verified: the literal browser "Add to Home Screen" install prompt UI (`beforeinstallprompt`), since that requires a full browser session rather than headless automation. All of the underlying technical criteria Chrome checks before offering that prompt — valid manifest with icons/name/start_url/display, served over HTTPS or localhost, a registered service worker with a fetch handler — are confirmed met.
