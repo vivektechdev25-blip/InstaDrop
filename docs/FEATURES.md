@@ -2,13 +2,17 @@
 
 ## MVP scope (5-day target)
 
-- [x] Single photo/video/reel URL parsing — confirmed live against real posts; carousel parsing implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
-- [x] Direct CDN link retrieval — `GET /api/v1/download` confirmed live for both image and video, correct headers and complete valid files
-- [ ] Media preview player
-- [x] Responsive dark/light UI
+- [x] Single photo/video/reel/carousel URL parsing — confirmed live against real posts, including 9/9 real carousel posts; private-account detection implemented but unverified (confirmed non-blocking), see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
+- [x] Direct CDN link retrieval — `GET /api/v1/download` confirmed live for image, video, and carousel slides, correct headers and complete valid files
+- [x] Media preview player — `PreviewCard`/`MediaViewer` (video player, carousel prev/next + dots), confirmed live in a real browser for image, video, and carousel posts
+- [x] Responsive dark/light UI — **verified, not assumed**: real screenshots + programmatic overflow/touch-target checks at 5 breakpoints (375/430/768/1024/1440px), see [TESTING.md](./TESTING.md#responsive-verification-permanent-requirement-baseline-established-2026-08-04)
 - [ ] Serverless edge API
 - [x] Rate limiting (in-memory `express-rate-limit` for MVP — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp))
-- [ ] Complete SEO setup
+- [x] Complete SEO setup — metadata, OG/Twitter, JSON-LD, sitemap, dynamic robots.txt, all confirmed live, see [SEO.md](./SEO.md)
+
+## Progressive Web App
+
+- [x] Installable app shell — manifest with real icons, hand-rolled service worker (network-first navigations, cache-first assets), confirmed live including an actual offline reload test. See [SEO.md](./SEO.md#pwa).
 
 ## Explicitly out of MVP scope (post-MVP roadmap)
 

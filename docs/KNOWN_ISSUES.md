@@ -112,6 +112,15 @@ Unlike carousel support above, this one could not be resolved this session — e
 
 **What would resolve this in the future:** a real Instagram post URL from an account the user owns or controls that is currently set to private. Until then, this stays documented as unverified — confirmed as an acceptable, non-blocking state rather than something to fabricate a test result for.
 
+## Responsive baseline: two bugs found and fixed 2026-08-04
+
+Established a permanent responsive-verification baseline (5 breakpoints, real Playwright screenshots + programmatic overflow/touch-target checks) — full detail in [TESTING.md](./TESTING.md#responsive-verification-permanent-requirement-baseline-established-2026-08-04). Two real bugs surfaced and were fixed, neither caught by the earlier Lighthouse pass:
+
+1. `Toast`'s translucent background let content behind it bleed through, reading as broken overlapping text on the error state at both 375px and 1440px. Fixed with an opaque background.
+2. Four elements (paste button, theme toggle, mobile hamburger, `MobileNav` links) measured below the 44×44px WCAG/HIG touch-target minimum — a stricter bar than Lighthouse's own 24×24px check, so passing Lighthouse 100 didn't catch these. All fixed and re-verified (17/17 pass, was 11/17 failing).
+
+Zero horizontal overflow found at any breakpoint, before or after.
+
 ## Structural limitations to keep in mind
 
 - Instagram's DOM/API can change without notice — both scraper tiers are inherently fragile to Instagram-side changes; this is exactly why the tier system exists rather than depending on one technique.

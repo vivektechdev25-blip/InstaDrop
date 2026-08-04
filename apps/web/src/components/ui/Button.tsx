@@ -18,7 +18,11 @@ const buttonVariants = cva(
         default: "h-11 px-5",
         sm: "h-9 px-3 text-sm",
         lg: "h-12 px-8 text-base",
-        icon: "h-10 w-10",
+        // 44px, not 40px - confirmed live that a 40x40 icon button falls
+        // short of the WCAG 2.5.5 / Apple HIG 44x44 touch-target minimum
+        // (Lighthouse's own accessibility audit only requires 24x24, so
+        // passing that didn't catch this).
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {

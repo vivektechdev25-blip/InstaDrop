@@ -69,13 +69,16 @@ export function InputForm() {
             onChange={(event) => setUrl(event.target.value)}
             aria-describedby={errorMessage ? "instagram-url-error" : undefined}
             aria-invalid={status === "ERROR"}
-            className="pr-11"
+            className="pr-12"
           />
+          {/* h-11 w-11 (44px) - confirmed live via a responsive screenshot
+              check that the previous 36x36 size fell short of the WCAG
+              2.5.5 / Apple HIG 44x44 touch-target minimum. */}
           <button
             type="button"
             onClick={handlePasteFromClipboard}
             aria-label="Paste from clipboard"
-            className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ClipboardPaste className="h-4 w-4" />
           </button>

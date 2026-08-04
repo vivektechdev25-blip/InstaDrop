@@ -35,12 +35,17 @@ export function MobileNav({ open, onOpenChange, links }: MobileNavProps) {
             className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background p-6 md:hidden"
             aria-label="Mobile navigation"
           >
-            <ul className="flex flex-col gap-4">
+            {/* py-3 on each link (not the old zero-padding plain text) -
+                confirmed live via a responsive screenshot check that the
+                links measured 24px tall, well under the 44px WCAG 2.5.5 /
+                Apple HIG touch-target minimum. gap dropped since the
+                links' own padding now provides the spacing. */}
+            <ul className="flex flex-col gap-1">
               {links.map((link) => (
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="block text-base font-medium text-foreground"
+                    className="-mx-3 block rounded-md px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-secondary"
                     onClick={() => onOpenChange(false)}
                   >
                     {link.label}

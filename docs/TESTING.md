@@ -39,6 +39,25 @@ Verified live against **9 real, currently-public carousel posts** (sourced via w
 
 Genuinely could not be tested this session — not from lack of trying, but because private posts are by definition not publicly discoverable, so there's no real example to search for, and creating a throwaway Instagram account isn't possible in this environment (requires phone/email verification). Full explanation of what was tried and what's needed to unblock it: [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#private-account-detection-genuinely-blocked-not-just-didnt-get-to-it-2026-08-04).
 
+## Responsive verification (permanent requirement, baseline established 2026-08-04)
+
+Mobile-first (spec Section 17) is now a **verified, not assumed** characteristic — re-run this section (or the relevant subset) whenever layout-affecting UI changes, not just once. Tested via real Playwright browser automation at five breakpoints: 375px (mobile), 430px (mobile large), 768px (tablet), 1024px (laptop), 1440px (desktop).
+
+**Coverage:** home page in `IDLE` state, home page with `MobileNav` open, all three legal pages, home page with a real fetched image `PreviewCard`, home page with a real fetched video `PreviewCard` (video posts loaded once each and the viewport resized through all 5 breakpoints without re-fetching — tests actual CSS reflow, not 5 separate fresh loads), and the client-side invalid-URL error/toast state.
+
+**Checked programmatically, not just eyeballed:** horizontal overflow (`document.documentElement.scrollWidth` vs. `clientWidth`) at every breakpoint for every page/state, and touch-target size (getBoundingClientRect, ≥44×44px per WCAG 2.5.5 / Apple HIG — a stricter bar than Lighthouse's own 24×24px accessibility check) for every interactive element on mobile widths.
+
+**Result:** zero horizontal overflow anywhere, across all pages/states/breakpoints, both before and after the fixes below.
+
+**Two real bugs found via this pass (not caught by Lighthouse, since neither is an overflow or a Lighthouse-style 24px touch-target failure):**
+
+| Bug | Found via | Fix |
+|---|---|---|
+| `Toast` used a translucent tinted background (`bg-destructive/10`, `bg-success/10`). On the error state at both 375px and 1440px, this let the submit button and footer links visibly bleed through the toast card behind it — read as broken overlapping text, not a floating notification. | Visual screenshot inspection (the automated overflow/touch-target checks don't catch this — it's a stacking/opacity issue, not a size issue) | Switched to an opaque `bg-card` background with a colored border + icon for variant distinction, body text kept neutral for readability. Re-screenshotted at both breakpoints: clean, fully opaque, no bleed-through. |
+| 4 elements measured below the 44×44px touch-target minimum on mobile: "Paste from clipboard" button (36×36), theme toggle + mobile-menu hamburger (40×40, from `Button`'s `size="icon"`), and `MobileNav`'s Privacy/Terms/Contact links (327×**24** — no vertical padding at all). All had already passed Lighthouse's own accessibility audit (100/100), since Lighthouse's touch-target check only requires 24×24px. | Programmatic `getBoundingClientRect()` check at 375px/430px | Paste button → 44×44px. `Button`'s `icon` size variant → 44×44px (fixes both the theme toggle and hamburger, and any future usage). `MobileNav` links → added `py-3` (each now comfortably exceeds 44px tall) and a hover state, replacing bare zero-padding text. Also gave the toast's dismiss button an explicit 44×44px hit area (`X` icon it wraps was previously unmeasured/undersized). Re-ran the full check afterward: 17/17 touch targets now pass, 0 failures (was 11/17 failing). |
+
+**Also confirmed:** image and video `PreviewCard`s (including the video player's native controls) reflow correctly at every breakpoint with no distortion or clipping — spot-checked visually at all 5 widths, not just algorithmically.
+
 ## Known test gaps
 
 - Private-account detection is implemented but not live-verified — blocked, see above.
