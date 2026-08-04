@@ -2,8 +2,8 @@
 
 ## MVP scope (5-day target)
 
-- [ ] Single photo/video/reel/carousel URL parsing — blocked on scraper strategy, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
-- [ ] Direct CDN link retrieval
+- [x] Single photo/video/reel URL parsing — confirmed live against real posts; carousel parsing implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
+- [ ] Direct CDN link retrieval — extraction returns a direct CDN URL, but the proxy-download endpoint (`GET /api/v1/download`) isn't implemented yet
 - [ ] Media preview player
 - [x] Responsive dark/light UI
 - [ ] Serverless edge API

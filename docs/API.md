@@ -68,4 +68,6 @@ Sets `Content-Disposition: attachment` to force download instead of inline playb
 
 ## Implementation status
 
-Routes, controllers, validators, and the error envelope are fully wired and confirmed working end-to-end via `curl` — both a Zod validation failure (`INVALID_URL`) and the stubbed `scraperService` throwing (`SERVER_ERROR`) return the correct response shape. The scraper and download services (`apps/api/src/services`) themselves are still stubs — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for why `scraperService.extractMedia` is currently blocked.
+`POST /api/v1/fetch` is fully implemented and confirmed live end-to-end: real public image post, real public reel (video), a nonexistent-shortcode `INVALID_URL` case, and Zod request validation all return the correct response shape and real data where applicable. `PRIVATE_ACCOUNT` detection is implemented but not live-verified — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md). Carousel posts currently return image-only slides (video-in-carousel and the click-through slide collection itself are unverified against a real carousel).
+
+`GET /api/v1/download` is not implemented yet (`downloadService` is still a stub).

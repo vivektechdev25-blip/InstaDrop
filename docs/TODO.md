@@ -9,12 +9,16 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Implement dark/light theme toggle (`useTheme` hook)
 
 ## Day 2 — Backend parsing API
-- [ ] Implement `scraperService.extractMedia` (multi-tier fallback pipeline) — **blocked on a scraping-method decision, see below**
+- [x] Implement `scraperService.extractMedia` (multi-tier fallback pipeline) — Tier 1 `instagram-url-direct`, Tier 2 Playwright, see [ARCHITECTURE.md](./ARCHITECTURE.md#scraper-tiers-instagram-url-direct-fast-playwright-fallback)
 - [ ] Implement `downloadService.streamToResponse`
-- [ ] Verify `/api/v1/fetch` and `/api/v1/download` end-to-end against a real public post
+- [x] Verify `/api/v1/fetch` end-to-end against real public posts — image post and reel both confirmed live (real caption/author/media URL, video file downloads complete and valid); not-found path confirmed live (`INVALID_URL`); private-account path implemented but **not** live-verified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)
+- [ ] Verify `/api/v1/download` end-to-end (endpoint not implemented yet)
+- [ ] QA carousel extraction against a real multi-slide post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
+- [ ] QA private-account detection against a real private post (implemented but unverified, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md))
+- [ ] Give `packages/types` a real build step before the API Dockerfile can actually run in production — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#deployment-gap-packagestypes-has-no-build-step)
 
 ## Day 3 — Client integration & security
-- [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint; currently always resolves to `SERVER_ERROR` since `scraperService` is still a stub
+- [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts
 - [x] Loading skeletons + error toasts
 - [ ] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API
 
@@ -28,9 +32,6 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [ ] Deploy `apps/web` to Vercel, `apps/api` to Railway
 - [ ] Custom domain + SSL
 - [ ] End-to-end smoke test of the full [Pre-production readiness checklist](./DEPLOYMENT.md#pre-production-readiness-checklist)
-
-## Open decision — scraper primary/fallback tiers
-Live testing (2026-08-04) confirmed the "easy" anonymous scraping tiers (legacy `?__a=1&__d=dis`, plain page HTML, `/embed/captioned/`, unauthenticated internal GraphQL) all fail against current Instagram — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md). `scraperService.extractMedia` is blocked until a scraping strategy is chosen.
 
 ## Future scaling (not MVP)
 - [ ] If `apps/api` moves to multiple Railway instances, replace `express-rate-limit` (in-memory) with a distributed rate limiter (e.g. Upstash Redis, sliding window) — in-memory counters don't sync across instances and the effective limit multiplies with instance count. See [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [SECURITY.md](./SECURITY.md#rate-limiting).

@@ -67,3 +67,15 @@ instadrop-monorepo/
 `express-rate-limit` runs in-memory, per Railway instance, enforcing 10 requests / 10 minutes / IP. This is intentional for the MVP: the backend deploys as a single Railway instance, so there is no cross-instance state to synchronize, and it avoids the cost/operational overhead of a Redis dependency (previously Upstash) before it's needed.
 
 **Revisit at scale:** if `apps/api` ever scales to multiple Railway instances, in-memory counters no longer share state across instances and the limit becomes effectively `N × 10 req / 10 min / IP`. At that point, switch back to a distributed store (e.g. Upstash Redis with a sliding-window algorithm) so the limit holds across instances. Tracked in [TODO.md](./TODO.md).
+
+### Scraper tiers: instagram-url-direct (fast), Playwright (fallback)
+
+Decision made 2026-08-04, after live-testing showed every anonymous, session-less scraping approach fails against current Instagram (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)):
+
+- **Tier 1 (`apps/api/src/services/scrapers/instagramUrlDirectTier.ts`):** the `instagram-url-direct` npm package, which replays Instagram's internal persisted-query GraphQL call. Fast when it works (sub-second), but the persisted `doc_id` it hardcodes can go stale without warning — live-tested and confirmed to fail this way even against a real, currently-public post.
+- **Tier 2 (`apps/api/src/services/scrapers/playwrightTier.ts`):** headless Chromium renders the real post page and reads Instagram's own server-rendered `og:` meta tags (image + caption), plus intercepts the first `video/mp4` network response for video posts. Confirmed live to work where plain HTTP scraping (even with a browser-matching User-Agent) does not — Instagram's bot detection filters on more than the UA string, and a real browser context gets past it.
+
+**Explicitly rejected** (per product decision, not a technical dead end): a paid third-party scraping API (breaks the near-zero-cost MVP budget in [DEPLOYMENT.md](./DEPLOYMENT.md#cost-projections) and sends every submitted URL to a third party) and an own-account session-cookie pool (repurposes the private-account-own-content mechanism in [SECURITY.md](./SECURITY.md) to scrape *other people's* public content at scale — a materially different ToS/ban risk the spec never discussed).
+
+**Latency:** the spec's <800ms extraction target ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) applies only to the Tier 1 success path. Tier 2 launches a real browser and waits for the page to render — confirmed live at ~4-5 seconds per request. This is an accepted tradeoff: reliability over raw speed for the fallback path, since Tier 1 alone is not dependable enough to be the only tier.
+
