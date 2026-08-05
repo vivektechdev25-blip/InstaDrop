@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface MobileNavLink {
   href: string;
@@ -15,6 +17,8 @@ interface MobileNavProps {
 }
 
 export function MobileNav({ open, onOpenChange, links }: MobileNavProps) {
+  const pathname = usePathname();
+
   return (
     <AnimatePresence>
       {open ? (
@@ -41,17 +45,24 @@ export function MobileNav({ open, onOpenChange, links }: MobileNavProps) {
                 Apple HIG touch-target minimum. gap dropped since the
                 links' own padding now provides the spacing. */}
             <ul className="flex flex-col gap-1">
-              {links.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="-mx-3 block rounded-md px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-secondary"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
+              {links.map((link) => {
+                const isActive = pathname === link.href;
+                return (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cn(
+                        "-mx-3 block rounded-md px-3 py-3 text-base font-medium transition-colors duration-150 ease-out hover:bg-secondary",
+                        isActive ? "text-primary" : "text-foreground"
+                      )}
+                      onClick={() => onOpenChange(false)}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </motion.nav>
         </>
