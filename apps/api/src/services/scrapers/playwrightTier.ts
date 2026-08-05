@@ -80,6 +80,12 @@ export const playwrightTier: IMediaScraper = {
       // URL and re-requesting it makes the CDN serve the complete file
       // (verified via `curl -L`, full valid .mp4, correct byte size) - so
       // we just take the first video/mp4 response and strip the range.
+      //
+      // Confirmed live 2026-08-05: this captured URL is Instagram's
+      // DASH-adaptive video representation - video-only, vp9, zero audio
+      // streams (verified via ffprobe on the actual downloaded file). It's
+      // only used as a fallback now; findProgressiveVideoUrl() below finds
+      // the real muxed (h264+aac) file and is preferred whenever available.
       let capturedVideoUrl: string | null = null;
       page.on("response", (response) => {
         if (capturedVideoUrl) return;
@@ -147,7 +153,10 @@ export const playwrightTier: IMediaScraper = {
       // disambiguating which slide a given video response belongs to isn't
       // reliable enough to build on top of - carousels are treated as
       // image-only until that's verified against a real multi-slide post.
-      const videoUrl = slideImageUrls.length === 1 ? capturedVideoUrl : null;
+      const progressiveVideoUrl =
+        slideImageUrls.length === 1 ? await findProgressiveVideoUrl(page) : null;
+      const videoUrl =
+        slideImageUrls.length === 1 ? progressiveVideoUrl ?? capturedVideoUrl : null;
 
       const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
         videoUrl
@@ -182,6 +191,65 @@ async function readPageMeta(page: Page): Promise<PageMeta> {
         ogImageWidth: get('meta[property="og:image:width"]'),
         ogImageHeight: get('meta[property="og:image:height"]'),
       };
+    })()
+  `);
+}
+
+/**
+ * Confirmed live 2026-08-05: the DASH-adaptive video Chromium requests
+ * during page load (see capturedVideoUrl above) is video-only - vp9, zero
+ * audio streams, verified via ffprobe. Instagram separately embeds a
+ * "progressive" (single-file, pre-muxed) rendition in one of the page's
+ * server-rendered `<script type="application/json" data-sjs>` relay-data
+ * blobs, under a `video_versions` array, even for logged-out visitors who
+ * never get the interactive `<video>` element mounted (it's meant for
+ * `PolarisPostVideoPlayerLoggedOutSurface.react`). Confirmed live against
+ * 2 real reels: that URL is h264+aac, the audio Instagram's own
+ * `has_audio: true` flag on the same object promises. Instagram's own
+ * `video_versions` entries (differing `type` values) all pointed at the
+ * identical URL/resolution in both real posts tested - so this returns
+ * one URL, not a real list of distinct qualities (see docs/KNOWN_ISSUES.md
+ * for why a quality selector isn't being built on top of this).
+ *
+ * Deep-searches every relay-data script tag rather than assuming a fixed
+ * JSON path, since Instagram's internal component nesting isn't a stable
+ * contract - only the presence of a `video_versions` array is relied on.
+ * Returns null (not a thrown error) if nothing is found, since this is a
+ * best-effort upgrade over capturedVideoUrl, not a required step - e.g.
+ * image/carousel posts never have this data at all.
+ */
+async function findProgressiveVideoUrl(page: Page): Promise<string | null> {
+  return page.evaluate<string | null>(`
+    (() => {
+      const scripts = Array.from(
+        document.querySelectorAll('script[type="application/json"][data-sjs]')
+      );
+
+      function deepFindVideoVersions(node, depth) {
+        if (depth > 14 || node === null || typeof node !== "object") return null;
+        if (Array.isArray(node.video_versions) && node.video_versions.length > 0) {
+          return node.video_versions;
+        }
+        for (const key of Object.keys(node)) {
+          const found = deepFindVideoVersions(node[key], depth + 1);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      for (const script of scripts) {
+        try {
+          const parsed = JSON.parse(script.textContent || "");
+          const versions = deepFindVideoVersions(parsed, 0);
+          if (versions && versions[0] && typeof versions[0].url === "string") {
+            return versions[0].url;
+          }
+        } catch {
+          // Not every data-sjs script tag is well-formed JSON we care
+          // about - skip and keep searching the rest.
+        }
+      }
+      return null;
     })()
   `);
 }

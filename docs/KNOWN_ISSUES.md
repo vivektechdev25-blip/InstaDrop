@@ -1,5 +1,35 @@
 # Known Issues
 
+## Downloaded videos had no audio (2026-08-05): fixed
+
+**Reported:** a real downloaded reel played back with video only, no sound.
+
+**Root cause, confirmed via `ffprobe` on the actual downloaded file, not assumed:** the extracted URL (from both Tier 1's `instagram-url-direct` package and Tier 2's naive "first `video/mp4` network response" capture) is Instagram's DASH-adaptive video representation - `ffprobe` showed exactly one stream, `vp9`, video-only, zero audio streams. Confirmed this is real: even navigating to the actual post in a real Playwright-driven Chromium session and attempting playback only ever produced the same single video-only network request - no separate audio segment request was ever observed.
+
+**Where the real audio lives:** Instagram separately embeds a pre-muxed "progressive" rendition inside one of the page's server-rendered `<script type="application/json" data-sjs>` relay-data blobs - present even for logged-out visitors, under a component named `PolarisPostVideoPlayerLoggedOutSurface.react`, despite no `<video>` element ever actually mounting into the DOM for an anonymous session (0 `<video>` tags found live). That blob carries `"has_audio":true` and a `video_versions` array. Downloaded and `ffprobe`'d directly from Instagram's CDN: h264 video + AAC audio (44.1kHz stereo), confirmed live against **2 independent real reels**.
+
+**Fix:**
+- `playwrightTier.ts` gained `findProgressiveVideoUrl()` - deep-searches every `data-sjs` script tag's parsed JSON for a `video_versions` array (not a fixed path, since Instagram's internal component nesting isn't a stable contract) and prefers that URL over the old DASH-only capture, which is now only a fallback.
+- `instagramUrlDirectTier.ts` (Tier 1) has no access to this data at all - its GraphQL query (a fixed, persisted `doc_id`) only ever returns the `video_url` field, which is the same video-only DASH representation. There's no additional field to request instead. So a single (non-carousel) video post now intentionally throws a plain `Error` to force fallback to Tier 2, rather than silently returning a file with no sound. Carousels are untouched - video slides within a carousel are a separate, already-documented gap in both tiers (see below), not something this fix is scoped to touch.
+
+**Verified, not just "should work":** fetched 2 real reels through the actual running API end-to-end (`POST /api/v1/fetch` → `GET /api/v1/download`), `ffprobe`'d the real downloaded bytes for both: `video=true, audio=true` in both, h264+AAC, with **1422 real decoded audio packets** spanning the full clip duration (66.0s audio vs. 65.9s video) - a genuine, full-length synced track, not an empty declared one. `Content-Length` matched actual received bytes exactly in every test. Re-ran an existing real image-carousel post afterward to confirm no regression: still 2/2 images, still resolved via Tier 1 with no fallback needed (the video-only check only applies when `media_details.length === 1 && type === "video"`).
+
+**Not fabricated as fully resolved:** literal playback-with-sound could not be listened to in this sandboxed environment; packet-level `ffprobe` evidence (real, non-empty audio stream synced to the video's duration) is the strongest verification available here.
+
+## Files downloaded from Instadrop failed on WhatsApp share ("Download failed"): fixed, same root cause as above
+
+**Reported:** a file downloaded from Instadrop failed with a generic WhatsApp error ("Download failed. The download was unable to complete.") when shared to another device.
+
+**Ruled out first, not assumed innocent:**
+- **Proxy/header corruption:** checked `Content-Length` against actual bytes received through `GET /api/v1/download` - matched exactly, every time, both before and after the fix. `downloadService.ts` sets `Content-Type` directly from Instagram's own upstream response header (not hardcoded/guessed), and pipes the stream with no transformation in between. No truncation or mismatch found anywhere in the proxy path.
+- **`moov` atom placement (a common "corrupt file" cause on strict mobile receivers when it sits after `mdat`, forcing a full download before any player can read the file header):** checked byte offsets directly in both the old and new files - `moov` comes before `mdat` in both. Not the cause.
+
+**Most likely actual cause, given the codec evidence found while fixing the audio bug above:** the old video-only file was VP9 inside an `.mp4`/MOV container - a combination with meaningfully weaker support across mobile OS media frameworks than H.264+AAC (VP9 is primarily a WebM/YouTube codec; H.264+AAC-in-MP4 is the universal baseline essentially every platform, including WhatsApp's, is built to expect). The same fix that restores audio (see above) also switches the codec to H.264+AAC.
+
+**Real automated proxy for a strict receiver, since actual WhatsApp isn't available in this environment:** queried Windows' own Shell media-property extraction (`Shell.Application` COM, backed by the same class of OS-level codec plumbing many mobile apps rely on) for both files. The new H.264+AAC file's audio bit rate was recognized as a valid property; the old VP9-only file exposed no audio-related property at all. A real, measurable difference in how a generic OS media pipeline parses the two files - not proof WhatsApp specifically would reject the old one, but consistent with it.
+
+**Not independently confirmed via an actual WhatsApp share** - flagged honestly rather than claimed fixed outright, matching the standard set for the [PWA install prompt's real-browser check](#pwa-install-prompt-system-2026-08-04): this needs a real device/WhatsApp session to fully close out. If the same failure recurs after this fix on a real share, that would mean the codec theory was incomplete and needs revisiting with new evidence.
+
 ## Scraper implementation notes (2026-08-04)
 
 `scraperService.extractMedia` is implemented as a two-tier fallback (`instagram-url-direct` → Playwright) — see [ARCHITECTURE.md](./ARCHITECTURE.md#scraper-tiers-instagram-url-direct-fast-playwright-fallback) for why. Live-testing against real public posts along the way surfaced several non-obvious bugs, all fixed, documented here so the reasoning isn't lost:

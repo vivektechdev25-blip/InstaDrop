@@ -29,6 +29,27 @@ export const instagramUrlDirectTier: IMediaScraper = {
       throw new Error("instagram-url-direct returned no media_details.");
     }
 
+    // Confirmed live 2026-08-05: this package's `item.url` for videos is
+    // Instagram's GraphQL `video_url` field, which points at the
+    // DASH-adaptive representation - video-only, no audio track (verified
+    // via ffprobe on the actual downloaded file). The doc_id this package
+    // queries is fixed/persisted server-side, so there's no field to
+    // request instead that would return the muxed file. Only the
+    // Playwright tier can reach that (it reads a different, page-embedded
+    // data source - see findProgressiveVideoUrl() in playwrightTier.ts),
+    // so a single (non-carousel) video post throws here to force the
+    // fallback rather than silently returning a file with no sound.
+    // Carousels are left alone: any video-slide handling is an existing,
+    // separately-documented gap in both tiers (see docs/KNOWN_ISSUES.md),
+    // not something this change is scoped to fix.
+    const isSingleVideoPost =
+      result.media_details.length === 1 && result.media_details[0]?.type === "video";
+    if (isSingleVideoPost) {
+      throw new Error(
+        "instagram-url-direct only exposes a video-only (no audio) URL for single video posts - falling through to the Playwright tier."
+      );
+    }
+
     const media: MediaItem[] = result.media_details.map((item) => ({
       type: item.type === "video" ? "video" : "image",
       url: item.url,
