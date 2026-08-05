@@ -45,6 +45,16 @@ const config: Config = {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        // The second, supporting hue for the hero gradient/glow - exposed
+        // as its own color token (not just buried inside backgroundImage
+        // below) so the second glow blob can reference it directly
+        // (bg-hero-glow-accent/[0.06]) instead of an inline hsl(var(...))
+        // arbitrary value in the component.
+        "hero-glow-accent": "hsl(var(--hero-gradient-to))",
+      },
+      backgroundImage: {
+        "hero-gradient":
+          "linear-gradient(to right, hsl(var(--hero-gradient-from)), hsl(var(--hero-gradient-to)))",
       },
       borderRadius: {
         // Proportional scale, not one variable derived down - bigger

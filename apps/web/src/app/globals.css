@@ -45,6 +45,17 @@
     --radius-sm: 0.5rem;
     --radius-md: 0.625rem;
     --radius-lg: 1rem;
+
+    /* Hero headline gradient (bg-hero-gradient in tailwind.config.ts) +
+       the second, smaller glow blob behind the hero - stays in the
+       primary's neighboring hues (blue-violet -> magenta) rather than
+       jumping across the wheel. Confirmed live 2026-08-05 via WCAG
+       relative-luminance calculation: worst-case stop is 3.87:1 against
+       white, which clears the 3:1 large-text minimum (the hero heading
+       is 40-48px/800 weight, so it qualifies as large text under WCAG,
+       not the stricter 4.5:1 normal-text bar). */
+    --hero-gradient-from: 255 85% 58%;
+    --hero-gradient-to: 295 75% 55%;
   }
 
   .dark {
@@ -82,6 +93,15 @@
 
     --success: 142 65% 50%;
     --success-foreground: 0 0% 100%;
+
+    /* Lighter than the light-mode stops - confirmed live: worst-case
+       5.08:1 against the near-black dark background, clearing 3:1 (and
+       4.5:1) comfortably. Light/dark need independently-tuned stops here,
+       not a shared value - the luminance direction needed is opposite
+       (light mode needs dark-enough text, dark mode needs light-enough
+       text), same reasoning as --primary's own light/dark split. */
+    --hero-gradient-from: 255 85% 68%;
+    --hero-gradient-to: 300 70% 68%;
   }
 
   * {
