@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { LegalPageShell } from "@/components/legal/LegalPageShell";
+import { LegalSection } from "@/components/legal/LegalSection";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -6,80 +8,137 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
 };
 
-const LAST_UPDATED = "August 4, 2026";
+const LAST_UPDATED = "August 5, 2026";
+
+const SECTIONS = [
+  { id: "agreement", label: "Agreement to These Terms" },
+  { id: "what-instadrop-does", label: "What Instadrop Does" },
+  { id: "acceptable-use", label: "Acceptable Use" },
+  { id: "not-affiliated", label: "Not Affiliated with Instagram or Meta" },
+  { id: "intellectual-property", label: "Intellectual Property" },
+  { id: "no-warranty", label: "No Warranty" },
+  { id: "limitation-of-liability", label: "Limitation of Liability" },
+  { id: "changes", label: "Changes to These Terms" },
+  { id: "contact", label: "Contact Us" },
+];
 
 export default function TermsPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-h1 tracking-tight">Terms of Service</h1>
-      <p className="text-sm text-muted-foreground">Last updated: {LAST_UPDATED}</p>
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-h1 tracking-tight">Terms of Service</h1>
+        <p className="text-sm text-muted-foreground">Last updated: {LAST_UPDATED}</p>
+      </div>
 
-      <p className="mt-2 text-muted-foreground">
-        By using Instadrop, you agree to these terms. If you don&apos;t agree with them,
-        please don&apos;t use the service.
-      </p>
+      <LegalPageShell sections={SECTIONS}>
+        <LegalSection id="agreement" title="Agreement to These Terms">
+          <p>
+            By using Instadrop, you agree to these terms. If you don&apos;t agree with
+            them, please don&apos;t use the service. We&apos;ve tried to write these in
+            plain language rather than dense legal boilerplate — if anything here is
+            unclear, let us know.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">What Instadrop does</h2>
-      <p className="text-muted-foreground">
-        Instadrop lets you preview and download media from <strong>public</strong>{" "}
-        Instagram posts, reels, videos, and carousels by pasting a link. It works entirely
-        without an account. It does not support private accounts, and does not store any
-        Instagram media on its own servers — everything is streamed directly from
-        Instagram&apos;s content delivery network to your browser.
-      </p>
+        <LegalSection id="what-instadrop-does" title="What Instadrop Does">
+          <p>
+            Instadrop&apos;s main tool lets you preview and download media from{" "}
+            <strong>public</strong> Instagram posts, reels, videos, and carousels by
+            pasting a link. It works entirely without an account, and doesn&apos;t store
+            any Instagram media on its own servers — everything is streamed directly from
+            Instagram&apos;s content delivery network to your browser.
+          </p>
+          <p>
+            A separate feature lets you download your own private Reels and posts, using
+            your own Instagram session cookie. This feature is strictly for downloading{" "}
+            <strong>your own</strong> content — it authenticates as you, and only returns
+            media if our backend confirms the content actually belongs to the account your
+            session cookie represents. It is not a general-purpose way to access other
+            people&apos;s private accounts, and using it to attempt to do so is a
+            violation of these terms.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Your responsibility</h2>
-      <p className="text-muted-foreground">
-        You&apos;re responsible for how you use content downloaded through Instadrop.
-        Only download media you own, have explicit permission to use, or are otherwise
-        legally entitled to download — for example, for personal, non-commercial use of
-        your own content. Instadrop does not grant you any rights to third-party content,
-        and using it to infringe someone else&apos;s copyright or to violate
-        Instagram&apos;s own Terms of Use is your responsibility, not ours.
-      </p>
+        <LegalSection id="acceptable-use" title="Acceptable Use">
+          <p>
+            You agree to use Instadrop only for public content you&apos;re legally
+            entitled to access — or, for the own-private-content feature, content that
+            genuinely belongs to your own account. You agree not to:
+          </p>
+          <ul className="flex flex-col gap-2 pl-5">
+            <li className="list-disc">Use Instadrop to access, download, or redistribute content you don&apos;t have the rights to.</li>
+            <li className="list-disc">
+              Attempt to use the own-private-content feature to access another
+              person&apos;s private account, or to circumvent Instagram&apos;s own privacy
+              controls.
+            </li>
+            <li className="list-disc">
+              Circumvent, automate around, or abuse the service&apos;s rate limits, or use
+              the service for bulk/automated scraping.
+            </li>
+            <li className="list-disc">
+              Use Instadrop in any way that violates Instagram&apos;s own Terms of Use, or
+              any applicable law.
+            </li>
+          </ul>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Not affiliated with Instagram or Meta</h2>
-      <p className="text-muted-foreground">
-        Instadrop is an independent tool and is not affiliated with, endorsed by, or
-        sponsored by Instagram or Meta Platforms, Inc. All Instagram content accessed
-        through this service remains the property of its respective owners.
-      </p>
+        <LegalSection id="not-affiliated" title="Not Affiliated with Instagram or Meta">
+          <p>
+            Instadrop is an independent tool and is not affiliated with, endorsed by, or
+            sponsored by Instagram or Meta Platforms, Inc. All Instagram content accessed
+            through this service remains the property of its respective owners.
+            &quot;Instagram&quot; is a trademark of Meta Platforms, Inc.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Fair use limits</h2>
-      <p className="text-muted-foreground">
-        To keep the service available and responsive for everyone, requests are rate
-        limited per IP address. Attempting to circumvent these limits, or using the
-        service for automated bulk scraping, is not permitted.
-      </p>
+        <LegalSection id="intellectual-property" title="Intellectual Property">
+          <p>
+            Instadrop doesn&apos;t claim any ownership or rights over content you preview
+            or download through the service — that content belongs to its original
+            creator, same as it did on Instagram. Instadrop&apos;s own interface, design,
+            and code are our property (or that of our licensors), and using the service
+            doesn&apos;t grant you any rights to them beyond normal use of the site.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">No warranty</h2>
-      <p className="text-muted-foreground">
-        Instadrop depends on Instagram&apos;s own, publicly-facing infrastructure, which
-        can change without notice. The service is provided &quot;as is,&quot; without
-        warranty of any kind, including any guarantee that a given link will always
-        successfully resolve.
-      </p>
+        <LegalSection id="no-warranty" title="No Warranty">
+          <p>
+            Instadrop depends on Instagram&apos;s own, publicly-facing infrastructure,
+            which can change without notice. The service is provided &quot;as is,&quot;
+            without warranty of any kind, including any guarantee that a given link will
+            always successfully resolve, or that the own-private-content feature will
+            always be able to authenticate a given session.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Limitation of liability</h2>
-      <p className="text-muted-foreground">
-        To the fullest extent permitted by law, Instadrop and its operator are not liable
-        for any damages arising from your use of, or inability to use, the service.
-      </p>
+        <LegalSection id="limitation-of-liability" title="Limitation of Liability">
+          <p>
+            To the fullest extent permitted by law, Instadrop and its operator are not
+            liable for any damages arising from your use of, or inability to use, the
+            service, including any consequences of downloading or sharing content you
+            weren&apos;t entitled to.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Changes to these terms</h2>
-      <p className="text-muted-foreground">
-        We may update these terms from time to time. Continued use of the service after a
-        change means you accept the updated terms.
-      </p>
+        <LegalSection id="changes" title="Changes to These Terms">
+          <p>
+            We may update these terms from time to time. Continued use of the service
+            after a change means you accept the updated terms. Meaningful changes will
+            also update the &quot;Last updated&quot; date above.
+          </p>
+        </LegalSection>
 
-      <h2 className="mt-6 text-h2">Contact</h2>
-      <p className="text-muted-foreground">
-        Questions about these terms? Reach out via the{" "}
-        <a href="/contact" className="text-primary underline underline-offset-2">
-          contact page
-        </a>
-        .
-      </p>
+        <LegalSection id="contact" title="Contact Us">
+          <p>
+            Questions about these terms? Reach out via the{" "}
+            <a href="/contact" className="text-primary underline underline-offset-2">
+              contact page
+            </a>
+            .
+          </p>
+        </LegalSection>
+      </LegalPageShell>
     </div>
   );
 }

@@ -6,7 +6,7 @@
 - Never expose secrets or API keys.
 - Never trust frontend validation — always validate on the backend (Zod schemas in `apps/api/src/validators`).
 - Never log sensitive information (cookies, tokens, credentials).
-- IP addresses hashed with SHA-256 + a daily rotating salt before storage.
+- IP addresses hashed with SHA-256 + a daily rotating salt before storage — this describes the *intended* design of `requestLogRepository`/`RequestLog` (schema and insert logic are fully implemented), **not current active behavior**: confirmed via a full-codebase grep (2026-08-05, while fact-checking the legal pages overhaul) that nothing in `apps/api` actually calls `requestLogRepository.insert()` — no controller or middleware is wired up to it. Request logging is not currently happening at all. Wiring it up is tracked as a separate follow-up, not bundled into any pass so far. See [docs/FEATURES.md](./FEATURES.md#legal-pages-structured-sectioned-sidebar-navigation--2026-08-05) for where this was caught.
 
 ## Rate limiting
 
