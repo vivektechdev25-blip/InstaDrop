@@ -5,12 +5,19 @@ import { motion } from "framer-motion";
 import { Layers, Link, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { AddressBarExample } from "@/components/marketing/AddressBarExample";
+import { cn } from "@/lib/utils";
 
 interface Feature {
   icon: LucideIcon;
   title: string;
   description: string;
   visual?: ReactNode;
+  // Spans the full grid width on its own row instead of sitting as a lone
+  // narrow card next to empty slots (7 items doesn't divide evenly into a
+  // 2 or 3 column grid). At lg+, where it has real room to spare, the
+  // description and visual sit side by side instead of stacked - a plain
+  // full-width vertical stack there left too much empty space to one side.
+  wide?: boolean;
 }
 
 const FEATURES: Feature[] = [
@@ -49,6 +56,7 @@ const FEATURES: Feature[] = [
     title: "Address-bar shortcut",
     description: "Already have the Instagram link copied? Type instadrop.com/ right before it in your browser's address bar and hit enter — you'll land straight on the preview, no extra visit needed.",
     visual: <AddressBarExample />,
+    wide: true,
   },
 ];
 
@@ -67,7 +75,10 @@ export function FeatureList() {
 
       <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((feature) => (
-          <Card key={feature.title} className="min-w-0">
+          <Card
+            key={feature.title}
+            className={cn("min-w-0", feature.wide && "sm:col-span-2 lg:col-span-3")}
+          >
             <CardHeader className="gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <feature.icon className="h-5 w-5" aria-hidden="true" />
@@ -75,8 +86,19 @@ export function FeatureList() {
               <CardTitle>{feature.title}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{feature.description}</p>
-              {feature.visual ? <div className="mt-4">{feature.visual}</div> : null}
+              {feature.wide ? (
+                <div className="lg:flex lg:items-center lg:gap-8">
+                  <p className="text-sm text-muted-foreground lg:max-w-md">{feature.description}</p>
+                  {feature.visual ? (
+                    <div className="mt-4 lg:mt-0 lg:w-72 lg:shrink-0">{feature.visual}</div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  {feature.visual ? <div className="mt-4">{feature.visual}</div> : null}
+                </>
+              )}
             </CardContent>
           </Card>
         ))}
