@@ -37,4 +37,9 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     answer:
       "Yes. The site is fully responsive, and it can be installed as an app for quicker access.",
   },
+  {
+    question: "Is there a faster way to use Instadrop?",
+    answer:
+      "Yes. If you already have an Instagram link copied, you can skip the homepage entirely — just type instadrop.com/ directly before the link in your browser's address bar and press enter. You'll land straight on the preview and download screen.",
+  },
 ];

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Layers, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
+import { Layers, Link, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
 interface Feature {
@@ -40,6 +40,11 @@ const FEATURES: Feature[] = [
     icon: RefreshCw,
     title: "Built for reliability",
     description: "A layered extraction system with an automatic fallback, so one broken path doesn't take the whole thing down.",
+  },
+  {
+    icon: Link,
+    title: "Address-bar shortcut",
+    description: "Already have the Instagram link copied? Type instadrop.com/ right before it in your browser's address bar and hit enter — you'll land straight on the preview, no extra visit needed.",
   },
 ];
 
