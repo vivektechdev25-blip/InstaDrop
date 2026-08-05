@@ -17,16 +17,16 @@ export function DownloaderPage({ initialUrl }: DownloaderPageProps) {
       <Navbar />
 
       <main className="flex-1">
-        <section className="container flex flex-col items-center gap-6 py-20 text-center sm:py-28">
+        <section className="container flex flex-col items-center gap-6 py-16 text-center sm:py-24">
           <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
             No login. No watermark. No cost.
           </span>
 
-          <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">
+          <h1 className="max-w-2xl text-display tracking-tight">
             Download Instagram photos, reels &amp; videos in original quality
           </h1>
 
-          <p className="max-w-xl text-balance text-muted-foreground sm:text-lg">
+          <p className="max-w-xl text-balance text-base text-muted-foreground">
             Paste a public Instagram link and get a direct, high-resolution download —
             no account required.
           </p>

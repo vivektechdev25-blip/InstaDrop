@@ -29,7 +29,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
   return (
     <Card className="mx-auto max-w-md text-left animate-fade-in">
       <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-        <p className="font-medium">@{post.author.username || "unknown"}</p>
+        <p className="text-sm font-semibold">@{post.author.username || "unknown"}</p>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
@@ -42,7 +42,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
                 type="button"
                 onClick={() => goToSlide(slideIndex - 1)}
                 aria-label="Previous slide"
-                className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-transform duration-150 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -50,7 +50,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
                 type="button"
                 onClick={() => goToSlide(slideIndex + 1)}
                 aria-label="Next slide"
-                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-transform duration-150 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -66,8 +66,8 @@ export function PreviewCard({ post }: PreviewCardProps) {
                     className="flex h-6 w-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span
-                      className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                        dotIndex === slideIndex ? "bg-primary" : "bg-background/60"
+                      className={`h-1.5 rounded-full transition-all duration-200 ease-out ${
+                        dotIndex === slideIndex ? "w-4 bg-primary" : "w-1.5 bg-background/60"
                       }`}
                     />
                   </button>
