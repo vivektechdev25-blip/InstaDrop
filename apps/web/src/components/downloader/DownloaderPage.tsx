@@ -66,10 +66,6 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
             className="pointer-events-none absolute left-[62%] top-[14%] -z-10 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-hero-glow-accent/[0.02] blur-3xl dark:bg-hero-glow-accent/[0.12]"
           />
 
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
-            No login. No watermark. No cost.
-          </span>
-
           <h1 className="max-w-2xl text-display tracking-tight">
             Download Instagram photos, reels &amp; videos in{" "}
             {/* Large text (40-48px/800 weight) qualifies for WCAG's 3:1
