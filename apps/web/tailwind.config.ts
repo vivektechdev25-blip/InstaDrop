@@ -105,6 +105,17 @@ const config: Config = {
           "0%": { backgroundPosition: "-1000px 0" },
           "100%": { backgroundPosition: "1000px 0" },
         },
+        // Radix Accordion exposes the measured content height as a CSS
+        // custom property specifically so height:auto can still be
+        // animated (a plain CSS transition can't animate to/from "auto").
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
       },
       animation: {
         // 150-300ms range project-wide: ease-out for entrances (feels like
@@ -116,6 +127,8 @@ const config: Config = {
         "slide-up": "slide-up 0.25s ease-out",
         "slide-down-out": "slide-down-out 0.2s ease-in",
         shimmer: "shimmer 2s infinite linear",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-in",
       },
     },
   },
