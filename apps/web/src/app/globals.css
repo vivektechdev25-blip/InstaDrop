@@ -65,7 +65,13 @@
     --border: 240 6% 16%;
     --ring: 262 83% 65%;
 
-    --primary: 262 83% 65%;
+    /* 65% lightness measured 4.19:1 contrast against white text - confirmed
+       live via Lighthouse + independent WCAG relative-luminance
+       calculation, both agreeing exactly. Below the 4.5:1 AA minimum for
+       normal text - a genuine, pre-existing bug on every primary button
+       in dark mode, just never caught before now. 63% passes at ~4.6:1
+       with a small margin, while staying close to the original color. */
+    --primary: 262 83% 63%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 240 6% 14%;
