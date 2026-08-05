@@ -1,5 +1,15 @@
 # Known Issues
 
+## Quality selector (2026-08-05): investigated, not built - no real substance for videos
+
+Proposed feature: let the user pick a resolution/quality before downloading. Investigated first, per the project's own rule against fabricating options that don't correspond to a real distinct source URL, rather than building UI speculatively.
+
+**Finding:** Instagram's `video_versions` array (the same progressive/muxed data source used to fix the audio bug above) has 3 entries per post, which looked promising - but downloading and `ffprobe`-ing all 3 for **2 different real reels** showed they're byte-identical duplicates (same URL, same resolution, same file size), not distinct qualities. Only **one real, genuinely downloadable quality exists per video** through this data source.
+
+Real multi-resolution data does exist elsewhere - the page also advertises `number_of_qualities: 7` alongside a full DASH manifest - but those representations are fragmented and video-only (the same DASH stream shape that caused the missing-audio bug). Offering them as pickable "quality" options would reintroduce that exact bug for every option except real server-side muxing (`ffmpeg`) per quality level, a heavier addition the spec explicitly gated behind confirming it's genuinely necessary first.
+
+**Decision (confirmed with the user, 2026-08-05):** don't build a quality selector for video posts - there's nothing real to choose between without adding `ffmpeg` muxing infrastructure for a feature whose actual payoff (per-post) is one real file either way. No `QualitySelector` component was built; `InstagramPost`/`MediaItem` in `packages/types` was not extended with a variants field, since it would have nothing genuine to carry for videos. Revisit only if a post type or Instagram response shape is found with genuinely distinct downloadable quality URLs - images and single-photo posts were not separately investigated here since they were never in scope for "quality" in the way video bitrate/resolution is.
+
 ## Downloaded videos had no audio (2026-08-05): fixed
 
 **Reported:** a real downloaded reel played back with video only, no sound.
