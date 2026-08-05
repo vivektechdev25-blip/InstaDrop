@@ -1,5 +1,24 @@
 # Known Issues
 
+## UI polish pass (2026-08-05): audit findings
+
+Before touching any component, audited the codebase against a checklist of common "looks unpolished" culprits (inconsistent spacing, too many font sizes, flat color with no depth, inconsistent radius, unstyled interaction states, abrupt transitions). Full token proposal and before/after evidence in [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md); this is the raw audit record.
+
+**Confirmed real issues, each with file-level evidence:**
+1. `--card` and `--background` were identical (`0 0% 100%`) in light mode - cards had zero fill-color separation from the page, relying entirely on a border + `shadow-sm`.
+2. `Card`/`DialogContent` used Tailwind's hardcoded default `rounded-xl` while `Button`/`Input`/`Toast` used the themed `rounded-lg` token - both rendered at 12px only by coincidence (both happened to equal `--radius`'s value at the time).
+3. No real type scale: hero used `text-4xl`/`text-5xl`, legal-page h1s used `text-3xl`, legal-page h2s used `text-xl`, Card/Dialog titles used bare `text-lg` - four unrelated sizes.
+4. `Footer`'s `py-10` (40px) and the hero section's `py-20 sm:py-28` (80/112px) were off the approved 4/8/12/16/24/32/48/64/96 spacing scale.
+5. `Toast` had an entrance animation (`animate-slide-up`) but no exit animation - dismissal was a hard, instant unmount.
+6. `MediaViewer` had no reserved `aspect-ratio` - real layout shift before video/image content loaded, and no loading placeholder for the image byte-load itself.
+7. `Navbar`/`MobileNav` had no active-link indicator - visiting `/privacy-policy` didn't visually distinguish "Privacy" from "Terms"/"Contact".
+
+**Already fine, not manufactured as problems:** single accent color used consistently project-wide (no drift found); `MobileNav` already had proper Framer Motion enter/exit transitions; touch targets and `aria-modal`/focus-visible rings were already solid from earlier phases (this pass didn't need to touch accessibility mechanics).
+
+**One real regression caught mid-pass, not shipped:** first attempt at `MediaViewer`'s loading-skeleton gated the whole `<video>` element's opacity on a `loadeddata` event, which also hid the native `poster` placeholder - confirmed via screenshot, not assumed. Reverted to trust the native poster behavior for video; the fade-in/skeleton treatment only applies to the image path, which has no equivalent native placeholder.
+
+**Correction to the originating spec's assumption:** it assumed `next/font` was already in use "from the earlier LCP fix." Confirmed via `grep` across `apps/web/src` that it isn't used anywhere - the app deliberately uses the system font stack (see [LCP investigation](#lcp-investigation-2026-08-04-resolved-as-a-measurement-methodology-issue-not-a-code-defect)), a performance decision, not an oversight. Preserved as-is; adding a webfont is a separate tradeoff decision out of scope for a styling refinement pass.
+
 ## Quality selector (2026-08-05): investigated, not built - no real substance for videos
 
 Proposed feature: let the user pick a resolution/quality before downloading. Investigated first, per the project's own rule against fabricating options that don't correspond to a real distinct source URL, rather than building UI speculatively.

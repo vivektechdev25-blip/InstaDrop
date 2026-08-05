@@ -49,6 +49,7 @@ pnpm dev:api
 | [API.md](./docs/API.md) | Endpoint specs, request/response formats |
 | [SECURITY.md](./docs/SECURITY.md) | Security measures, threat model |
 | [SEO.md](./docs/SEO.md) | Metadata strategy, structured data |
+| [DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md) | Typography, spacing, radius, color, and motion tokens |
 | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Deploy process, environments, CI/CD |
 | [TESTING.md](./docs/TESTING.md) | Testing strategy, edge cases |
 | [TODO.md](./docs/TODO.md) | Active task list |
