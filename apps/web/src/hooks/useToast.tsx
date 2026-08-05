@@ -15,6 +15,10 @@ export interface ToastItem {
   title: string;
   description?: string;
   variant: ToastVariant;
+  /** True once dismiss() has been called - Toaster renders it with the
+   * exit animation for LEAVE_ANIMATION_MS before actually removing it,
+   * instead of a hard, instant unmount. */
+  leaving?: boolean;
 }
 
 export interface ToastInput {
@@ -31,6 +35,10 @@ interface ToastContextValue {
 }
 
 const DEFAULT_DURATION_MS = 5000;
+// Matches the slide-down-out animation duration in tailwind.config.ts -
+// keeps the item mounted long enough to actually play the exit
+// transition before removing it from state.
+const LEAVE_ANIMATION_MS = 200;
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
@@ -38,7 +46,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismiss = useCallback((id: string) => {
-    setToasts((current) => current.filter((toastItem) => toastItem.id !== id));
+    setToasts((current) =>
+      current.map((toastItem) =>
+        toastItem.id === id ? { ...toastItem, leaving: true } : toastItem
+      )
+    );
+    setTimeout(() => {
+      setToasts((current) => current.filter((toastItem) => toastItem.id !== id));
+    }, LEAVE_ANIMATION_MS);
   }, []);
 
   const toast = useCallback(

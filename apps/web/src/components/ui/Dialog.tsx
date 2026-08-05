@@ -17,7 +17,7 @@ export const DialogOverlay = forwardRef<
     <DialogPrimitive.Overlay
       ref={ref}
       className={cn(
-        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-fade-in",
+        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out",
         className
       )}
       {...props}
@@ -42,7 +42,7 @@ export const DialogContent = forwardRef<
         // assumed present.
         aria-modal="true"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-lg focus:outline-none data-[state=open]:animate-slide-up",
+          "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface-elevated text-surface-elevated-foreground p-6 shadow-lg focus:outline-none data-[state=open]:animate-slide-up data-[state=closed]:animate-slide-down-out",
           className
         )}
         {...props}
@@ -54,7 +54,7 @@ export const DialogContent = forwardRef<
             (same class of bug found and fixed elsewhere this session). */}
         <DialogPrimitive.Close
           aria-label="Close dialog"
-          className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="h-4 w-4" />
         </DialogPrimitive.Close>
@@ -74,7 +74,7 @@ export const DialogTitle = forwardRef<
   return (
     <DialogPrimitive.Title
       ref={ref}
-      className={cn("text-lg font-semibold", className)}
+      className={cn("text-h3", className)}
       {...props}
     />
   );

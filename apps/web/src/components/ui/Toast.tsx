@@ -23,9 +23,13 @@ const VARIANT_ICON_COLOR: Record<ToastItem["variant"], string> = {
 export interface ToastProps {
   toastItem: ToastItem;
   onDismiss: (id: string) => void;
+  /** True for the render right before removal - plays the exit transition
+   * instead of the entrance one. Toaster holds the item mounted for the
+   * transition's duration before actually removing it from state. */
+  isLeaving?: boolean;
 }
 
-export function Toast({ toastItem, onDismiss }: ToastProps) {
+export function Toast({ toastItem, onDismiss, isLeaving = false }: ToastProps) {
   const Icon = VARIANT_ICON[toastItem.variant];
 
   return (
@@ -33,12 +37,16 @@ export function Toast({ toastItem, onDismiss }: ToastProps) {
       role="status"
       aria-live="polite"
       className={cn(
-        // bg-card, not a tinted bg-destructive/10 - confirmed live via a
-        // responsive screenshot that the previous translucent background
-        // let whatever sat underneath (the submit button, footer links)
+        // bg-surface-elevated (not the plain --card tier, and not a
+        // tinted bg-destructive/10) - confirmed live via a responsive
+        // screenshot that the previous translucent background let
+        // whatever sat underneath (the submit button, footer links)
         // visibly bleed through the toast, reading as broken overlapping
-        // text rather than a floating notification.
-        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border bg-card p-4 text-card-foreground shadow-lg animate-slide-up",
+        // text rather than a floating notification. Toasts float above
+        // the page the same way a modal does, so they use the same
+        // elevation tier as Dialog.
+        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border bg-surface-elevated p-4 text-surface-elevated-foreground shadow-lg",
+        isLeaving ? "animate-slide-down-out" : "animate-slide-up",
         VARIANT_BORDER[toastItem.variant]
       )}
     >
@@ -56,7 +64,7 @@ export function Toast({ toastItem, onDismiss }: ToastProps) {
         type="button"
         aria-label="Dismiss notification"
         onClick={() => onDismiss(toastItem.id)}
-        className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity duration-150 ease-out hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-4 w-4" />
       </button>
