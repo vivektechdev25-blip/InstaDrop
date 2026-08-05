@@ -47,7 +47,7 @@ User pastes URL -> Backend validates -> Backend detects private account
 
 No workaround. No credential collection. No exceptions.
 
-### Post-MVP: private account support (own content only)
+### Post-MVP: private account support (own content only) — implemented 2026-08-05
 
 Recommended approach: **session cookie, own content only**. Options evaluated:
 
@@ -56,25 +56,31 @@ Recommended approach: **session cookie, own content only**. Options evaluated:
 | Instagram Basic Display API | None (deprecated 2024) | N/A | N/A | Dead |
 | Instagram Graph API | Limited (Business/Creator only) | Safe | Safe | Too narrow |
 | Direct credential collection | High | Illegal (ToS violation) | Dangerous | Never |
-| **Session cookie (own content only)** | High | Safe | Safe (if done right) | **Recommended** |
+| **Session cookie (own content only)** | High | Safe | Safe (if done right) | **Recommended — built** |
 
-**Workflow:**
-1. User clicks "Download My Private Content" (separate, clearly labelled UI flow)
-2. User extracts their own Instagram session cookie via guided DevTools instructions
-3. User pastes the cookie into a dedicated secure input field
-4. Backend authenticates with Instagram using the cookie, verifies identity
-5. Backend fetches media **only from the authenticated user's own account** — any attempt to access another account is blocked server-side
-6. Media streams directly to the browser — nothing is stored
-7. Session cookie is discarded immediately after the request — never logged, cached, or persisted
+**Workflow (as built, `POST /api/v1/private/fetch`):**
+1. User navigates directly to `/private` — a separate page, not linked from `Navbar`/`Footer`, `noindex`. The public flow never prompts for a cookie.
+2. User extracts their own Instagram `sessionid` cookie via an in-UI guided accordion (`CookieHelpGuide.tsx`: DevTools → Application → Cookies → `sessionid`)
+3. User pastes the cookie into a dedicated, masked input (`type="password"` with a show/hide toggle), `autoComplete="off"`, `data-1p-ignore`/`data-lpignore` to suppress password-manager save prompts
+4. Backend attaches the cookie to a fresh Playwright `BrowserContext`, navigates to the requested URL. A redirect to `/accounts/login/` means the cookie is invalid/expired → `SESSION_EXPIRED`
+5. Backend extracts both the authenticated viewer's identity and the requested content's owner identity from the same page load, and fails closed (`ACCESS_DENIED`) unless they match exactly — missing/unparseable owner data is treated as a denial, never an implicit pass. Never trusts a client-supplied claim of ownership.
+6. Media extraction reuses the exact same helpers (`mediaExtractionHelpers.ts`) as the public Playwright tier — no parallel/duplicated extraction logic.
+7. The download itself reuses the existing, unmodified `GET /api/v1/download` proxy-stream pipeline (same SSRF guard, same header handling) — the cookie is not needed again at this step, since by then the response already carries a direct, cookie-independent CDN URL.
 
-**Non-negotiable rules:**
-- Never store session cookies (in-memory only, per-request)
-- HTTPS enforced on all endpoints handling cookies
-- Cookies redacted from all logs
-- Stricter rate limit than the public endpoint (e.g. 3 req / 10 min / IP)
-- Server-side ownership verification on every request — never trust client claims
-- Clear user disclosure before first use
-- Detect and handle expired sessions with a clear `SESSION_EXPIRED` error
+**Non-negotiable rules — status:**
+- Never store session cookies (in-memory only, per-request) — **done.** Scoped to one Playwright `BrowserContext` created and `close()`d (in a `finally` block) within a single request; never written to a database, log, cache, or any file.
+- HTTPS enforced on all endpoints handling cookies — deployment-time requirement, not app-code-enforceable in this local environment; noted for [DEPLOYMENT.md](./DEPLOYMENT.md).
+- Cookies redacted from all logs — **confirmed live**, see below.
+- Stricter rate limit than the public endpoint — **done and confirmed live.** 3 req / 10 min / IP (`PRIVATE_CONTENT_RATE_LIMIT` in `apps/api/src/constants/rateLimit.ts`), a genuinely separate `express-rate-limit` instance (`privateContentRateLimiter`, via a `createRateLimiter()` factory) from the public endpoint's 10/10min — tripping one's budget confirmed live not to affect the other's.
+- Server-side ownership verification on every request, never trusting client claims — **done, fail-closed by design; the specific extraction logic is not yet live-verified** (see [ARCHITECTURE.md](./ARCHITECTURE.md#own-private-content-flow-session-cookie-authenticated) and [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#own-private-content-authenticated-extraction-unverified-2026-08-05)).
+- Clear user disclosure before first use — **done.** `/private`'s page copy states plainly what the cookie is used for and its single-request lifetime before the form.
+- Detect and handle expired sessions with a clear `SESSION_EXPIRED` error — **done and confirmed live.** A well-formed-but-fake `sessionCookie` sent against a real reel URL correctly returned `401 SESSION_EXPIRED`, confirming the `/accounts/login/` redirect-detection path fires against real Instagram, not just in code review.
+
+**Log-redaction, confirmed live, not assumed:**
+- `apps/api/src/repositories/requestLogRepository.ts` is unused dead code — confirmed via `grep` across the codebase, nothing calls it. `RequestLog`'s own DB columns are `hashed_ip`/`endpoint`/`status_code`/`id`/`created_at` only — there is no column a raw cookie value could land in even if it were wired up.
+- `apps/api/src/app.ts` has no request-body-logging middleware.
+- Zod's `flatten().fieldErrors`, which `errorHandler.ts` returns for validation failures, was confirmed via direct script execution to contain only static validation message strings — never the submitted field value — so a malformed-cookie request never echoes the cookie back in its own error response.
+- `privateContentService.ts` wraps its Playwright/extraction logic in a try/catch that raises sanitized `AppError`s (`SESSION_EXPIRED`/`ACCESS_DENIED`/a generic server error) before anything reaches `errorHandler.ts`'s catch-all `console.error` — an unexpected internal exception (which could theoretically stringify a value containing the cookie in some edge case) never gets a bare, unsanitized log line at that final layer.
 
 ### Explicitly rejected approach
 

@@ -146,3 +146,61 @@ extractFromQueryParam()          extractFromCatchAllPath()      lib/urlParser.ts
 
 **Abuse throttle:** both entry points auto-trigger a fetch without a manual click, removing the natural throttle a manual paste provides. Both are marked `noindex` (static metadata on the catch-all route, conditional `generateMetadata` on the homepage when `?url=` is present) so crawlers can't discover and hit an unbounded set of URLs. Both share the exact same backend rate limiter as the manual flow, since both call the identical `apiClient.post("/fetch")` — confirmed live, not assumed: tripped the limiter via direct requests, then confirmed a **fresh** request through each entry point independently returns the same `RATE_LIMITED` UI state, proving there's no separate budget or bypass. See [SECURITY.md](./SECURITY.md#direct-url-mode-auto-fetch-throttling).
 
+## Own-private-content flow (session-cookie authenticated)
+
+A **separate, additive** feature (2026-08-05) from the public flow above — reject-with-`PRIVATE_ACCOUNT` MVP behavior is unchanged. Lets a user download their **own** private Reels/posts using their own Instagram session cookie. Four options were evaluated for private-account support before this project started (Basic Display API — dead; Graph API — Business/Creator only; direct credential collection — rejected on security/legal grounds; **session cookie, own content only — approved**), documented in [SECURITY.md](./SECURITY.md#own-private-content-session-cookie-handling).
+
+```
+apps/web/src/app/private/page.tsx          Separate page, own shell - never
+  |                                          reachable from the public flow,
+  |                                          noindex, not linked in Navbar/Footer
+  v
+PrivateContentForm.tsx                      Masked cookie input + Reel/post URL
+  |                                          input, reuses Input/Button/Card
+  v
+usePrivateContentFetch.ts                   Parallel state machine (own reducer -
+  |                                          SESSION_EXPIRED/ACCESS_DENIED have no
+  |                                          equivalent in useInstagramDownloader.ts)
+  v
+POST /api/v1/private/fetch                  Separate endpoint, NOT a modification
+  |                                          of /fetch. Own, stricter rate limiter
+  |                                          (3 req/10min vs 10 req/10min)
+  v
+privateContentService.ts
+  1. New Playwright context, sessionid cookie attached before navigation
+  2. Navigate to the target URL; page.url() redirected to /accounts/login/
+     -> SESSION_EXPIRED (a long-standing, structurally stable Instagram
+     redirect convention, chosen deliberately over guessing an embedded-
+     JSON key name for "is this session valid")
+  3. Extract the authenticated viewer's own identity from the SAME page
+     load (deep-search embedded relay data - see below)
+  4. Extract the requested content's owner identity, same technique
+  5. viewer.id !== owner.id (or owner.id missing/unparseable)
+     -> ACCESS_DENIED - fails CLOSED, never proceeds on an unverified
+     assumption of ownership
+  6. Extract media via the SAME shared helpers Tier 2 uses
+     (mediaExtractionHelpers.ts - audio-fix, full-res image, carousel)
+  7. context.close() - cookie's lifetime ends here, in-memory only
+      |
+      v
+Same ApiSuccessResponse<InstagramPost> shape as the public flow -> rendered
+via the EXISTING PreviewCard/MediaViewer, downloaded via the EXISTING,
+UNMODIFIED GET /api/v1/download
+```
+
+**Why this isn't a third scraper tier:** `IMediaScraper` (`extract(url: string)`) has no way to express "and verify ownership against this authenticated identity" - bending it to fit would be an awkward, leaky abstraction. `privateContentService.ts` doesn't implement that interface and doesn't go through `scraperService.ts`'s tier-fallback pattern; there's no fallback concept for an authenticated request, just one path that fails closed.
+
+**Why Tier 1 (`instagram-url-direct`) couldn't be adapted:** confirmed at the package-source level (`node_modules/.pnpm/instagram-url-direct@2.0.7/.../instagram.cjs`) that its request path accepts no cookie/session parameter at all — it fetches its own anonymous CSRF token and never attaches a `Cookie` header anywhere. This is a structural fact about the dependency, not a guess. Only the Playwright-based approach (Tier 2's pattern) can carry an authenticated session, since Playwright can attach cookies to a real browser context before navigation.
+
+**Refactor this feature required:** every DOM-parsing helper `playwrightTier.ts` used (`findProgressiveVideoUrl`, `findFullResolutionImage`, `collectCarouselSlides`, etc.) was module-private, not reusable elsewhere. Extracted into `mediaExtractionHelpers.ts` as a pure refactor (no behavior change, confirmed via a live regression fetch against a real reel before and after) so both the public Tier 2 and this authenticated flow share the exact same extraction logic rather than duplicating it.
+
+### Scope: Reels + Posts only, no Stories
+
+Investigated before building, not assumed: Reels/Posts have a stable, user-copyable permalink (`/reel/{shortcode}/`, `/p/{shortcode}/`) that fits the existing paste-a-link UX. Stories have no equivalent — they're conventionally accessed by tapping through a story tray, keyed internally by user ID + ephemeral media ID, not a link a typical user would know how to copy. A real Stories feature would need a genuinely different "browse your current active stories, pick one" UI, not this form. **Explicitly deferred** (decision confirmed 2026-08-05) rather than force-fit into the link-paste pattern — a separate, future feature if built at all.
+
+### What's confirmed live vs. genuinely unverified
+
+Confirmed live: request validation (both fields), the separate stricter rate limiter tripping independently of the public endpoint's budget, and that a validation failure never echoes the submitted cookie value back (Zod's `flatten().fieldErrors` contains only message strings). The refactor into `mediaExtractionHelpers.ts` was regression-tested against a real reel fetch before and after, confirming zero behavior change to the public flow. **Also now confirmed live:** the `/accounts/login/` redirect-on-expiry check itself — a well-formed-but-fake `sessionCookie` sent against a real reel URL returned a genuine `401 SESSION_EXPIRED`, proving Instagram really does redirect an invalid session to the login page and that the app correctly detects it, not just that the code compiles.
+
+**Genuinely unverified — flagged honestly, not glossed over:** the actual authenticated happy path, and — most importantly — the two identity-extraction functions (`findViewerIdentity`, `findContentOwner` in `privateContentService.ts`), which only ever run once past the login-redirect check (i.e. only with a real, currently-valid session). Both deep-search Instagram's embedded relay data for plausible key names (`viewer`/`logged_in_user`/`current_user` for the authenticated user; `owner.id` for content, extending the already-confirmed-live pattern that `owner.username`/`is_private` exist on the same GraphQL shape). Neither specific key name has been confirmed against a real authenticated response, because this project has no way to create or access a real, valid Instagram session in this environment — the same structural limitation as the long-standing private-account-detection gap (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)). Both fail closed (treated as `ACCESS_DENIED`) rather than proceeding on an unconfirmed guess if nothing is found. This needs real verification against a real test cookie from an account the user controls before the ownership check can be trusted as correct, not just as safely-fails-closed.
+
