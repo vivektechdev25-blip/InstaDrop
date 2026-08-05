@@ -1,5 +1,23 @@
 # Known Issues
 
+## Homepage depth pass (2026-08-05): Lighthouse caught a real, pre-existing contrast bug
+
+Building the new marketing sections (`TrustBar`, `HowItWorks`, `FeatureList`, `Faq`) prompted a fresh Lighthouse run against the production build - standard due diligence, not something the spec explicitly asked for. It caught a real defect unrelated to the new content.
+
+**Found:** Accessibility dropped from the established 100 baseline to 96. The failing audit was `color-contrast`, on the `InstallModal`'s "Install App" button - a component that already existed, untouched by this pass. Lighthouse's headless run happened to land in dark mode (matching `prefers-color-scheme` in that environment), and dark mode's `--primary` (`262 83% 65%`) against white button text measured 4.19:1 - below the 4.5:1 WCAG AA minimum for normal text.
+
+**Confirmed independently, not just trusted from the tool:** hand-computed the WCAG relative-luminance contrast formula for both light mode (`262 83% 58%`) and dark mode (`262 83% 65%`) against white text. Light mode: 5.83:1 (comfortable pass). Dark mode: 4.19:1 - matched Lighthouse's own number exactly, confirming this wasn't a tooling artifact.
+
+**Real impact:** this is the app's primary accent color, used for every filled primary button (Download, Install App, and any future primary action) in dark mode - a defect that predates this pass entirely, just never caught because no prior Lighthouse run happened to execute with the `InstallModal` open in a dark-mode context.
+
+**Fix:** `--primary` in dark mode moved from 65% to 63% lightness - solved algebraically (via the same manual contrast calculation), not by trial and error, landing at ~4.6:1 with a small margin while staying close to the original color. Re-ran Lighthouse after the fix: Accessibility back to 100.
+
+## Homepage depth pass (2026-08-05): whileInView + full-page screenshots
+
+Not a product bug - a testing-methodology gotcha worth recording so it isn't rediscovered. `HowItWorks`/`FeatureList`/`Faq` fade in via Framer Motion's `whileInView`, which relies on `IntersectionObserver` actually firing as a section enters the viewport. A first-pass `fullPage` Playwright screenshot (no scrolling beforehand) showed those three sections as blank space - confirmed via DOM inspection that the content was genuinely present (right text, right section count, zero console errors), just still at its `opacity: 0` initial animation state, because a `fullPage` capture doesn't scroll through the page the way a real visitor does.
+
+**Fix (to the test, not the app):** scroll through the full page height in discrete steps before capturing, which lets each section's observer fire naturally, then screenshot. This is exactly what a real visitor scrolling down the page experiences - the bug only existed in the verification script's shortcut, not in the shipped behavior.
+
 ## UI polish pass (2026-08-05): audit findings
 
 Before touching any component, audited the codebase against a checklist of common "looks unpolished" culprits (inconsistent spacing, too many font sizes, flat color with no depth, inconsistent radius, unstyled interaction states, abrupt transitions). Full token proposal and before/after evidence in [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md); this is the raw audit record.
