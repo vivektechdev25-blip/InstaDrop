@@ -111,3 +111,38 @@ components/pwa/
 
 **iOS Safari gap:** Safari never fires `beforeinstallprompt` at all (it has no A2HS API), so `canInstall` is permanently `false` there and the modal never appears — not a bug, a platform limitation. An iOS-specific instructional variant (manual "tap Share, then Add to Home Screen" walkthrough) was considered and explicitly deferred; documented as a known limitation in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
 
+## Direct URL mode: two entry points, one pipeline
+
+Two doorways that skip the homepage's manual paste-and-click, both funneling into the exact same downloader flow — neither gets its own validation, fetch, or preview logic:
+
+```
+https://instadrop.com/?url=<instagram-url>              (query param - for shared links)
+https://instadrop.com/<instagram-url>                    (catch-all - address-bar shortcut)
+      |                                    |
+      v                                    v
+extractFromQueryParam()          extractFromCatchAllPath()      lib/urlParser.ts
+(reads searchParams.url)         (rejoins params.url[] segments)  - pure extraction
+      |                                    |                       only, never
+      `-------------------+----------------'                       validates
+                           v
+              <DownloaderPage initialUrl={...}/>     components/downloader/DownloaderPage.tsx
+                           |                          - the ONE page shell (Navbar/hero/Footer)
+                           v                            shared by manual, ?url=, and catch-all
+              <InputForm initialUrl={...}/>           components/downloader/InputForm.tsx
+                           |                          - the ONE orchestration component: owns
+                           v                            url state, the hook, and every rendered
+              useInstagramDownloader().submit()          state (loading/error/PreviewCard)
+                           |                          - initialUrl seeds state + fires one
+                           v                            auto-submit effect on mount, going
+        VALIDATING -> FETCHING -> SUCCESS|ERROR          through the real state machine, not
+                                                          a silent background fetch
+```
+
+**Why validation isn't duplicated:** `useInstagramDownloader().submit()` already calls `cleanInstagramUrl()` + `isValidInstagramUrl()` (`lib/validators.ts`) before ever fetching, and already dispatches a friendly `ERROR` state for anything that fails. `urlParser.ts` therefore does zero validation of its own — it only extracts a raw candidate string, decoded defensively so it can't throw. This means garbage input (`instadrop.com/some/random/thing`) is handled for free by the existing error path: no new error UI, no unhandled exception, confirmed live.
+
+**A real bug found and fixed while building this:** the naive assumption was that a path like `/https://www.instagram.com/reel/X` splits into catch-all segments preserving the double slash as an empty-string artifact (`["https:", "", "www.instagram.com", ...]`), which a plain `join("/")` would reconstruct correctly. Confirmed live via `curl -I` that this is wrong — Next.js issues a 308 redirect that **collapses consecutive slashes before the catch-all route ever sees them**, so the real segments are `["https:", "www.instagram.com", "reel", "X"]` with the "//" already gone. `extractFromCatchAllPath()` detects a scheme-shaped first segment (`/^https?:$/`) and re-inserts `"//"` explicitly rather than relying on an empty segment that doesn't survive.
+
+**Route precedence (verified, not assumed):** Next.js App Router resolves static routes before the `[...url]` catch-all, so `/privacy-policy`, `/terms`, `/contact`, `/manifest.json`, `/robots.txt`, and `/sitemap.xml` all still resolve to their real handlers — confirmed live with `curl` against a production build after adding the catch-all route, not inferred from documentation.
+
+**Abuse throttle:** both entry points auto-trigger a fetch without a manual click, removing the natural throttle a manual paste provides. Both are marked `noindex` (static metadata on the catch-all route, conditional `generateMetadata` on the homepage when `?url=` is present) so crawlers can't discover and hit an unbounded set of URLs. Both share the exact same backend rate limiter as the manual flow, since both call the identical `apiClient.post("/fetch")` — confirmed live, not assumed: tripped the limiter via direct requests, then confirmed a **fresh** request through each entry point independently returns the same `RATE_LIMITED` UI state, proving there's no separate budget or bypass. See [SECURITY.md](./SECURITY.md#direct-url-mode-auto-fetch-throttling).
+

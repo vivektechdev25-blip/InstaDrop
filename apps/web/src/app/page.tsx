@@ -1,34 +1,23 @@
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
-import { InputForm } from "@/components/downloader/InputForm";
+import type { Metadata } from "next";
+import { DownloaderPage } from "@/components/downloader/DownloaderPage";
+import { extractFromQueryParam } from "@/lib/urlParser";
 
-export default function HomePage() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
+interface HomePageProps {
+  searchParams: { [key: string]: string | string[] | undefined };
+}
 
-      <main className="flex-1">
-        <section className="container flex flex-col items-center gap-6 py-20 text-center sm:py-28">
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
-            No login. No watermark. No cost.
-          </span>
+export function generateMetadata({ searchParams }: HomePageProps): Metadata {
+  // The ?url= form is a utility entry point (auto-fetch shortcut), not
+  // indexable content - an unbounded number of these could otherwise
+  // exist for every Instagram URL ever shared, which is not something
+  // search engines should crawl or index.
+  if (extractFromQueryParam(searchParams)) {
+    return { robots: { index: false, follow: false } };
+  }
+  return {};
+}
 
-          <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">
-            Download Instagram photos, reels &amp; videos in original quality
-          </h1>
-
-          <p className="max-w-xl text-balance text-muted-foreground sm:text-lg">
-            Paste a public Instagram link and get a direct, high-resolution download —
-            no account required.
-          </p>
-
-          <div className="w-full max-w-xl">
-            <InputForm />
-          </div>
-        </section>
-      </main>
-
-      <Footer />
-    </div>
-  );
+export default function HomePage({ searchParams }: HomePageProps) {
+  const initialUrl = extractFromQueryParam(searchParams);
+  return <DownloaderPage initialUrl={initialUrl ?? undefined} />;
 }

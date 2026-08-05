@@ -18,14 +18,30 @@ const PreviewCard = dynamic(
   { ssr: false }
 );
 
-export function InputForm() {
-  const [url, setUrl] = useState("");
+export interface InputFormProps {
+  /**
+   * Pre-fills the input and auto-submits once, for the ?url= and
+   * catch-all entry points - goes through the same VALIDATING/FETCHING
+   * states as a manual paste, not a silent background fetch.
+   */
+  initialUrl?: string;
+}
+
+export function InputForm({ initialUrl }: InputFormProps) {
+  const [url, setUrl] = useState(initialUrl ?? "");
   const { readText } = useClipboard();
   const { toast } = useToast();
   const { status, post, errorMessage, submit } = useInstagramDownloader();
   const lastAnnouncedError = useRef<string | null>(null);
+  const hasAutoSubmitted = useRef(false);
 
   const isFetching = status === "FETCHING" || status === "VALIDATING";
+
+  useEffect(() => {
+    if (!initialUrl || hasAutoSubmitted.current) return;
+    hasAutoSubmitted.current = true;
+    void submit(initialUrl);
+  }, [initialUrl, submit]);
 
   useEffect(() => {
     if (status !== "ERROR" && status !== "RATE_LIMITED") return;

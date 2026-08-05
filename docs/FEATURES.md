@@ -9,6 +9,7 @@
 - [ ] Serverless edge API
 - [x] Rate limiting (in-memory `express-rate-limit` for MVP — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp))
 - [x] Complete SEO setup — metadata, OG/Twitter, JSON-LD, sitemap, dynamic robots.txt, all confirmed live, see [SEO.md](./SEO.md)
+- [x] Direct URL mode — two entry points that skip the manual paste-and-click: `?url=<instagram-url>` (query param, for shared links) and `instadrop.com/<instagram-url>` (address-bar shortcut, catch-all route). Both auto-fill the input and auto-trigger the same fetch flow through the real `VALIDATING → FETCHING → SUCCESS|ERROR|RATE_LIMITED` state machine — no silent background fetch, no duplicated validation or fetch logic. Both `noindex`, and both confirmed live to share the exact same backend rate limiter as the manual flow (no separate budget, no bypass). See [ARCHITECTURE.md](./ARCHITECTURE.md#direct-url-mode-two-entry-points-one-pipeline).
 
 ## Progressive Web App
 

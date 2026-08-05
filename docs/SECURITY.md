@@ -14,6 +14,16 @@ Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-mem
 
 **Note:** in-memory rate limiting only holds its limit correctly on a single instance. If the API scales horizontally (multiple Railway instances), each instance tracks its own counters, so the effective limit multiplies with instance count. Revisit with a distributed store (e.g. Redis-backed sliding window) before scaling out — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [TODO.md](./TODO.md).
 
+## Direct URL mode: auto-fetch throttling
+
+`?url=` and the `instadrop.com/<instagram-url>` catch-all route (see [ARCHITECTURE.md](./ARCHITECTURE.md#direct-url-mode-two-entry-points-one-pipeline)) both auto-trigger a fetch without a manual click — the natural throttle a manual paste provides doesn't exist for either. Two entry points instead of one means this matters more, not less: a scripted loop could otherwise hit `?url=X1`, `?url=X2`, ... or `instadrop.com/<url1>`, `instadrop.com/<url2>`, ... with zero human interaction.
+
+Mitigations, each confirmed live rather than assumed:
+- **Shared rate limit, no separate budget.** Both entry points call the identical `apiClient.post("/fetch")` used by the manual flow, so they're covered by the same `express-rate-limit` counter (10 req / 10 min / IP) with no code path that could bypass it. Confirmed live: tripped the limiter via direct requests, then verified a fresh request through *each* entry point independently returns the same `RATE_LIMITED` state through the real UI (toast + inline message), not a raw API error.
+- **`noindex` on both.** The catch-all route carries static `robots: { index: false }` metadata; the homepage conditionally sets the same via `generateMetadata` only when `?url=` is present (the plain homepage stays indexable). Confirmed live via `curl` against the rendered `<head>`. Without this, an unbounded number of `?url=<post>` / `instadrop.com/<post>` combinations could otherwise be crawled and indexed as distinct pages.
+- **No silent fetching.** The auto-triggered fetch goes through the same `VALIDATING → FETCHING → SUCCESS|ERROR` state machine as a manual submission — the same visible loading skeleton, on both entry points, not a background request the user can't see.
+- **Garbage catch-all paths fail cleanly.** `[...url]` technically matches any unmatched path (e.g. `instadrop.com/some/random/thing`). This is not special-cased — it flows through the same validator that already rejects malformed input, showing the existing friendly error UI. Confirmed live: `HTTP 200`, no stack trace, no unhandled exception, no console errors.
+
 ## Download endpoint SSRF protection
 
 `GET /api/v1/download` proxy-streams whatever `url` it's given. Without a check, that makes it an open proxy — the API would fetch and relay *any* URL a caller supplies, which could be pointed at internal infrastructure or used to mask the origin of unrelated requests. `downloadMediaSchema.ts` restricts `url` to `*.cdninstagram.com` / `*.fbcdn.net` hostnames before the API ever makes the upstream request. Confirmed live: a non-Instagram-CDN URL is rejected with `400 INVALID_URL`.
