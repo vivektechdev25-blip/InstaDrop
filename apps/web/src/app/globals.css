@@ -7,8 +7,19 @@
     --background: 0 0% 100%;
     --foreground: 240 10% 4%;
 
-    --card: 0 0% 100%;
+    /* Was identical to --background (0 0% 100%) - cards had zero fill-color
+       separation from the page and relied entirely on a 1px border +
+       shadow-sm to read as a distinct surface. This is a real but subtle
+       step down, not a visible gray box. */
+    --card: 240 20% 98%;
     --card-foreground: 240 10% 4%;
+
+    /* Elevation tier above --card, for modals/dialogs - brighter than card
+       in light mode (elevated content can read as "brighter"), lighter
+       than card in dark mode (see .dark below), matching standard
+       dark-theme elevation convention. */
+    --surface-elevated: 0 0% 100%;
+    --surface-elevated-foreground: 240 10% 4%;
 
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
@@ -28,7 +39,12 @@
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    --radius: 0.75rem;
+    /* Proportional radius scale (bigger surface = bigger radius) replacing
+       the old single --radius variable that every size was derived from -
+       see tailwind.config.ts for why. */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 1rem;
   }
 
   .dark {
@@ -37,6 +53,11 @@
 
     --card: 240 9% 7%;
     --card-foreground: 0 0% 98%;
+
+    /* Lighter than --card, not darker - dark-theme elevation convention:
+       content floating above the page gets progressively lighter. */
+    --surface-elevated: 240 8% 10%;
+    --surface-elevated-foreground: 0 0% 98%;
 
     --muted: 240 6% 14%;
     --muted-foreground: 240 5% 65%;
