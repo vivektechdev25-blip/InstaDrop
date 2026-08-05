@@ -24,7 +24,7 @@ export function TrustBar() {
         <span
           key={item}
           role="listitem"
-          className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground"
+          className="rounded-full border border-border px-3.5 py-1.5 text-sm font-medium text-muted-foreground"
         >
           {item}
         </span>

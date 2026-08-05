@@ -28,29 +28,36 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
       <Navbar />
 
       <main className="flex-1">
-        <section className="container relative flex flex-col items-center gap-6 overflow-hidden py-16 text-center sm:py-24">
+        <section className="container relative flex flex-col items-center gap-8 overflow-hidden py-16 text-center sm:py-24">
           {/* Soft-edged radial glow, not the loud multi-color gradient
               some competitor downloader sites use - low enough opacity
               that it reads as presence/depth, not a competing visual
               element. overflow-hidden on the section keeps the blur
               from ever causing horizontal scroll.
 
-              Light-mode opacity tuned down twice, both times against a
-              real Lighthouse run, not assumed correct from the CSS
-              alone: the first version (primary/[0.08] + accent/[0.06])
-              measurably tinted the near-white background enough to drop
+              Light-mode opacity tuned down three times now, each against
+              real evidence, not assumed correct from the CSS alone: the
+              first version (primary/[0.08] + accent/[0.06]) measurably
+              tinted the near-white background enough to drop
               muted-foreground text (the badge above and the subtext
               paragraph below) from ~4.84:1 to 3.98:1 - below the 4.5:1
               normal-text minimum. A first reduction (0.05 + 0.03) got to
-              4.48:1 - closer, still failing. Landed on 0.035 + 0.02,
-              confirmed passing across 6 independent Lighthouse runs.
-              Dark mode's values were never touched - confirmed passing
-              both before and after via a pre-seeded dark-theme Chrome
-              profile, screenshot-verified each time as genuinely dark
-              (not just trusting the reported score). */}
+              4.48:1 - closer, still failing. 0.035 + 0.02 passed at the
+              time, confirmed across 6 independent Lighthouse runs - but
+              the 2026-08-05 hero scale-up pass (bigger headline pushing
+              the subtext down, a wider max-w-2xl container) shifted the
+              paragraph's position enough to reopen the same failure:
+              axe-core (run directly via Playwright per-breakpoint, since
+              Lighthouse's own chrome-launcher wasn't reliably honoring a
+              forced dark color-scheme in this environment) found 4.46:1,
+              light mode only, only at the 375/430px breakpoints - dark
+              mode and 768px+ were unaffected. Reduced again to
+              0.025 + 0.014, re-verified passing (details below).
+              Dark mode's values were never touched at any point -
+              confirmed still passing after this change too. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/[0.035] blur-3xl dark:bg-primary/[0.15]"
+            className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/[0.025] blur-3xl dark:bg-primary/[0.15]"
           />
           {/* Second, smaller, lower-opacity blob in the gradient's
               supporting hue - offset to partially overlap the primary
@@ -63,10 +70,10 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
               opacity alone wasn't the only lever worth using. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-[62%] top-[14%] -z-10 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-hero-glow-accent/[0.02] blur-3xl dark:bg-hero-glow-accent/[0.12]"
+            className="pointer-events-none absolute left-[62%] top-[14%] -z-10 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-hero-glow-accent/[0.014] blur-3xl dark:bg-hero-glow-accent/[0.12]"
           />
 
-          <h1 className="max-w-2xl text-display tracking-tight">
+          <h1 className="max-w-3xl text-display tracking-tight">
             Download Instagram photos, reels &amp; videos in{" "}
             {/* Large text (40-48px/800 weight) qualifies for WCAG's 3:1
                 large-text contrast bar, not the stricter 4.5:1 normal-text
@@ -78,7 +85,7 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
             </span>
           </h1>
 
-          <p className="max-w-xl text-balance text-base text-muted-foreground">
+          <p className="max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground">
             Paste a public Instagram link and get a direct, high-resolution download —
             no account required.
           </p>
@@ -87,7 +94,7 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
             <InputForm initialUrl={initialUrl} />
           </div>
 
-          <div className="w-full pt-2">
+          <div className="w-full pt-4">
             <TrustBar />
           </div>
         </section>

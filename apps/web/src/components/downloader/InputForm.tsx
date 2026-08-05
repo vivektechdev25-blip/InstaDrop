@@ -85,26 +85,35 @@ export function InputForm({ initialUrl }: InputFormProps) {
             onChange={(event) => setUrl(event.target.value)}
             aria-describedby={errorMessage ? "instagram-url-error" : undefined}
             aria-invalid={status === "ERROR"}
-            className="pr-12"
+            // Scoped to the hero only via className override (twMerge, not
+            // a change to Input's own defaults) - /private's form reuses
+            // this same component at its normal size and shouldn't grow
+            // as a side effect of this pass.
+            className="h-14 pl-5 pr-14 text-base"
           />
-          {/* h-11 w-11 (44px) - confirmed live via a responsive screenshot
-              check that the previous 36x36 size fell short of the WCAG
-              2.5.5 / Apple HIG 44x44 touch-target minimum. */}
+          {/* h-12 w-12 (48px) - still clears the 44px WCAG 2.5.5 / Apple
+              HIG touch-target minimum, sized up from 44px to stay
+              proportional to the taller h-14 input around it. */}
           <button
             type="button"
             onClick={handlePasteFromClipboard}
             aria-label="Paste from clipboard"
-            className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute right-1 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ClipboardPaste className="h-4 w-4" />
           </button>
         </div>
 
-        <Button type="submit" size="lg" disabled={isFetching || !url.trim()}>
+        <Button
+          type="submit"
+          size="lg"
+          disabled={isFetching || !url.trim()}
+          className="h-14 px-9 text-base [&_svg]:h-5 [&_svg]:w-5"
+        >
           {isFetching ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (
-            <Search className="h-4 w-4" aria-hidden="true" />
+            <Search aria-hidden="true" />
           )}
           Download
         </Button>

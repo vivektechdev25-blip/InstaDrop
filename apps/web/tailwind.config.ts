@@ -73,8 +73,16 @@ const config: Config = {
         // (hero used text-4xl/5xl, legal pages used text-3xl for "h1" and
         // text-xl for "h2", Card/Dialog titles used bare text-lg - four
         // unrelated scales with no shared system).
+        // Widened 2026-08-05: the old ceiling (3rem/48px) was reached by
+        // ~1451px viewport width, meaning it sat flat at its max for the
+        // entire 768-1440px breakpoint range - no real growth was visible
+        // on any real desktop screenshot. New ceiling lands at 1440px
+        // instead, so the whole desktop range actually grows: 40px(375) ->
+        // ~54px(1024) -> 60px(1440, capped). Mobile floor barely moves
+        // (40px -> ~41px) - not touched on purpose, per the scale-up pass
+        // that added this comment.
         display: [
-          "clamp(2.5rem, 2.32rem + 0.75vw, 3rem)",
+          "clamp(2.5rem, 2.1rem + 2vw, 3.75rem)",
           { lineHeight: "1.1", fontWeight: "800", letterSpacing: "-0.02em" },
         ],
         h1: ["2rem", { lineHeight: "1.2", fontWeight: "700", letterSpacing: "-0.01em" }],
