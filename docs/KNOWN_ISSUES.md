@@ -143,6 +143,30 @@ All three re-verified together via a full rebuild + fresh Playwright behavioral 
 
 Everything above was verified with a **synthetic** `beforeinstallprompt` event dispatched via Playwright (`page.addInitScript`) — this proves the app's own logic (capture, decision-making, modal, storage, accessibility) is correct, but it does not prove Chrome's real install-eligibility heuristics actually fire the event against this app in a live browser session. That confirmation requires a real, non-headless Chrome session and is a manual step by design (per user decision 2026-08-04) — it cannot be verified in headless automation, and no attempt was made to fabricate this result. See [SEO.md](./SEO.md#pwa) for the related, previously-flagged gap on the base install-eligibility criteria (manifest/service-worker/HTTPS), which this inherits.
 
+## Local dev server exit 2026-08-05: root cause confirmed, not an app bug
+
+Both local dev processes (`apps/web` on port 3000, `apps/api` on port 4000) were found down mid-session and had to be restarted. Investigated with the same standard as any other unverified claim in this project — checked logs before guessing, then found direct corroborating system evidence rather than settling for "restarting it fixed it."
+
+**What the logs showed:** both processes' stdout/stderr logs stop cleanly after normal, successful operation — no stack trace, no unhandled exception, no `OutOfMemory`, no non-zero exit message, nothing. `apps/web`'s log stopped at 00:08:56, `apps/api`'s at 00:10:23 (2026-08-05, IST) — both within about 90 seconds of each other. A silent, simultaneous stop across two independent Node processes with zero application-level error output is not the signature of a code bug in either app; it's the signature of something external terminating both at once.
+
+**Root cause, confirmed via Windows Event Viewer (`Microsoft-Windows-Kernel-Power`), not inferred:**
+
+| Time (2026-08-05) | Event |
+|---|---|
+| 00:08–00:10 | Last log output from both dev servers |
+| 00:25:46 | System enters sleep (Event ID 42, "Sleep Reason: Application API") |
+| 11:30:16 | System exits Modern Standby (Event ID 507, "Reason: Power Button") |
+| 11:33 | Servers found down, restarted |
+
+The machine went to sleep ~15–20 minutes after the servers were last active and stayed suspended for roughly 11 hours before being woken by the power button — exactly matching the gap between the two sets of server logs. Windows Modern Standby routinely suspends or network-disconnects background console-attached processes (these were started as plain background shell jobs, not registered Windows services), so the dev servers not surviving that cycle is expected laptop behavior, not an application defect.
+
+**Explicitly ruled out, not just assumed clean:**
+- **The new `[...url]` catch-all route throwing an unhandled exception:** checked `extractFromCatchAllPath()` and its callers — decoding is wrapped in try/catch, and the garbage-path test (`instadrop.com/some/random/thing`) was re-confirmed live to return a clean `200` with the existing friendly error UI, not a crash. Also, an exception here would only affect `apps/web`, not explain `apps/api` stopping within 90 seconds of it.
+- **A Playwright resource leak from the Tier 2 scraper:** `browserManager.ts` uses a lazily-created singleton `Browser` (never spawns a duplicate instance per request), and `playwrightTier.ts` closes its per-request `context` unconditionally in a `finally` block, including on every error path. A leak here would also manifest as gradual `apps/api`-only degradation, not a synchronized silent stop of both processes.
+- **Correlation with the rate-limiter or garbage-path stress testing from the Direct URL Mode work:** all of that testing completed with clean, expected output well before the logged sleep event at 00:25:46 — the timeline doesn't overlap.
+
+**Not something to "fix":** this is a local-dev-only artifact of running background processes on a laptop that sleeps, not a defect in Instadrop's code. **Production monitoring note:** the deployed target (Railway, see [DEPLOYMENT.md](./DEPLOYMENT.md)) is a managed container platform, not a laptop subject to OS sleep — this specific mechanism doesn't apply there. Regardless, once deployed, uptime/process-restart monitoring should be in place so that any *real* production crash (unlike this one) surfaces immediately rather than silently, since a production outage is far more costly than a paused local session.
+
 ## Structural limitations to keep in mind
 
 - Instagram's DOM/API can change without notice — both scraper tiers are inherently fragile to Instagram-side changes; this is exactly why the tier system exists rather than depending on one technique.
