@@ -1,13 +1,16 @@
 "use client";
 
+import { type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Layers, Link, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { AddressBarExample } from "@/components/marketing/AddressBarExample";
 
 interface Feature {
   icon: LucideIcon;
   title: string;
   description: string;
+  visual?: ReactNode;
 }
 
 const FEATURES: Feature[] = [
@@ -45,6 +48,7 @@ const FEATURES: Feature[] = [
     icon: Link,
     title: "Address-bar shortcut",
     description: "Already have the Instagram link copied? Type instadrop.com/ right before it in your browser's address bar and hit enter — you'll land straight on the preview, no extra visit needed.",
+    visual: <AddressBarExample />,
   },
 ];
 
@@ -63,7 +67,7 @@ export function FeatureList() {
 
       <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((feature) => (
-          <Card key={feature.title}>
+          <Card key={feature.title} className="min-w-0">
             <CardHeader className="gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <feature.icon className="h-5 w-5" aria-hidden="true" />
@@ -72,6 +76,7 @@ export function FeatureList() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">{feature.description}</p>
+              {feature.visual ? <div className="mt-4">{feature.visual}</div> : null}
             </CardContent>
           </Card>
         ))}
