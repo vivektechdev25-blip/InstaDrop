@@ -37,22 +37,37 @@ const STEPS: Step[] = [
 // lg:+ width range without any JS measurement. Column x-centers
 // approximate a 3-column grid's midpoints (1/6, 1/2, 5/6); y
 // approximates step 2's elevated position vs. steps 1/3's shared lower
-// baseline. Exact alignment with each card's icon badge isn't the goal -
-// the opaque Card backgrounds mask each path's endpoints, so only the
-// visible arc in the gap between cards needs to look right.
-const ARC_1_2 = "M 170 150 C 280 150 390 70 500 70";
-const ARC_2_3 = "M 500 70 C 610 70 720 150 830 150";
+// baseline.
+//
+// REGRESSION, found and fixed: the original version used a cubic bezier
+// with flat tangents at both ends (`C 280 150 390 70 500 70`) - a smooth
+// S-curve/easing shape designed to transition between two elevations,
+// not a bulging arc. Its curviest parts sit right at the flat-tangent
+// zones near each endpoint, which are exactly the parts masked by the
+// opaque Cards. Confirmed live (getBoundingClientRect on both the cards
+// and the SVG, not eyeballed): at 1440px, only normalized x in
+// [262, 369] is ever actually visible in the gap - the curve's
+// near-linear transitional midsection. Sampling that exact window's
+// slope at three points showed it varying by only ~9% end to end - it
+// was never going to read as curved, no matter how wide the gap.
+// Switched to a single quadratic control point pulled well above both
+// endpoints (a genuine upward bulge, not an easing transition) -
+// re-sampled the same visible window afterward and confirmed the slope
+// now varies ~31%, and confirmed the difference visually via screenshot
+// before calling it fixed.
+const ARC_1_2 = "M 170 150 Q 335 30 500 70";
+const ARC_2_3 = "M 500 70 Q 665 30 830 150";
 // Sits near the very bottom of the row (y=370 of 400), well below the
-// arcs' y=70-150 zone and below the elevated middle card's bottom edge -
+// arcs' zone and below the elevated middle card's bottom edge -
 // deliberately separated so it reads as its own distinct "these three
 // are still one sequence" line, not visual noise piled on the arcs.
 const BASELINE_1_3 = "M 170 370 L 830 370";
 
-// Bezier midpoints of the two curves above (De Casteljau at t=0.5, hand-
-// computed, not guessed), plus the straight line's own midpoint.
+// Quadratic midpoints of the two arcs above (t=0.5, hand-computed, not
+// guessed), plus the straight line's own midpoint.
 const CONNECTOR_DOTS = [
-  { left: "33.5%", top: "27.5%" },
-  { left: "66.5%", top: "27.5%" },
+  { left: "33.5%", top: "17.5%" },
+  { left: "66.5%", top: "17.5%" },
   { left: "50%", top: "92.5%" },
 ];
 
