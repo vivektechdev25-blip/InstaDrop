@@ -210,7 +210,12 @@ export function HowItWorks() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <h3 className="text-h3">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
+                {/* min-h reserves 3 lines' worth of space (text-sm's
+                    1.6 line-height * 14px = 22.4px/line) regardless of
+                    actual line count - step 3's shorter description
+                    otherwise wraps to one fewer line than the other two,
+                    measured as a real 22px card-height difference. */}
+                <p className="min-h-[4.5rem] text-sm text-muted-foreground">{step.description}</p>
               </div>
             </Card>
           ))}
