@@ -67,6 +67,9 @@ const APPLICATION_JSON_LD = {
   name: siteConfig.name,
   description: siteConfig.description,
   url: siteConfig.url,
+  // Real, deployed asset (apps/web/public/icon-512.png) - not a
+  // fabricated/placeholder image reference.
+  image: `${siteConfig.url}/icon-512.png`,
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Any",
   offers: {
