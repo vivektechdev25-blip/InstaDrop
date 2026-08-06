@@ -1,5 +1,17 @@
 # Known Issues
 
+## PreviewCard showed "@unknown" for captionless posts — fixed 2026-08-06
+
+Real screenshot from a live device showed the header reading "@unknown" while the correct username was visibly present in the text below it, on a real fetched reel. The initial hypothesis (two different fields being read for the header vs. the caption line) turned out to be wrong once investigated - both actually come from the same single `parseOgDescription()` call in `mediaExtractionHelpers.ts`, which already feeds the same parsed username into both `author.username` and (indirectly) the caption. There's no second field to drift; the bug was that this one shared function could fail completely.
+
+**Root cause, confirmed live against real posts, not guessed:** Instagram's `og:description` follows `"N likes, M comments - username on <date>: \"caption\""` - but omits the trailing `: "caption"` segment entirely when a post has no caption text, leaving just `"N likes, M comments - username on <date>"` with no colon. The old regex (`OG_DESCRIPTION_PATTERN`) required that colon unconditionally, so it failed to match at all on captionless posts - losing the username along with the (nonexistent) caption. On failure, the code fell back to `{ username: "", caption: ogDescription.trim() }`: an empty username (→ "@unknown" via `PreviewCard`'s `post.author.username || "unknown"` fallback) and the *raw, unparsed* og:description dumped into the caption paragraph instead - which still contained the real username as plain text, exactly explaining why it visibly "was there" in the caption line.
+
+**Reproduced live against 10 real, current public reels** (found via search, not fabricated): 9 resolved successfully, and 1 (`instagram.com/reel/DSdYE_pEm8i`, a captionless repost) hit exactly this bug, confirming it's real and non-trivial in frequency, not a hypothetical edge case.
+
+**Fix:** made the trailing caption group optional in the regex (`/-\s*([a-zA-Z0-9_.]+)\s+on\s+[^:\n]+?(?::\s*"?([\s\S]*))?$/`) so the username still parses even when there's no caption to follow it. Re-verified against all 10 real reels: the previously-broken one now correctly shows `tchalamet`, zero regressions on the other 9.
+
+**Was silently present in past `PreviewCard` verification passes** (see [TESTING.md](./TESTING.md), [CHANGELOG.md](./CHANGELOG.md), [TODO.md](./TODO.md)) - every prior real post used for testing happened to have a caption, so this never surfaced until a real captionless post was hit live.
+
 ## Homepage depth pass (2026-08-05): Lighthouse caught a real, pre-existing contrast bug
 
 Building the new marketing sections (`TrustBar`, `HowItWorks`, `FeatureList`, `Faq`) prompted a fresh Lighthouse run against the production build - standard due diligence, not something the spec explicitly asked for. It caught a real defect unrelated to the new content.

@@ -283,7 +283,16 @@ export async function collectCarouselSlides(
   return assetOrder.map((assetId) => bestByAssetId.get(assetId)!.url);
 }
 
-const OG_DESCRIPTION_PATTERN = /-\s*([a-zA-Z0-9_.]+)\s+on\s+[^:]+:\s*"?([\s\S]*)$/;
+// The trailing `: "caption"` group is optional - confirmed live 2026-08-06
+// against real reels that a post with no caption at all makes Instagram
+// omit that whole segment from og:description, leaving just
+// "N likes, M comments - username on <date>" with no colon. The previous
+// pattern required a colon unconditionally, so it failed to match at all
+// on those posts - losing the username along with the (nonexistent)
+// caption, which is what caused PreviewCard's header to show "@unknown"
+// while the raw, unparsed og:description (still containing the real
+// username as plain text) fell through to the caption paragraph instead.
+const OG_DESCRIPTION_PATTERN = /-\s*([a-zA-Z0-9_.]+)\s+on\s+[^:\n]+?(?::\s*"?([\s\S]*))?$/;
 
 export function parseOgDescription(ogDescription: string | null): {
   username: string;
