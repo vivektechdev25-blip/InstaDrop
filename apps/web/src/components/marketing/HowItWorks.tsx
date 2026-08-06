@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ClipboardPaste, Download, Eye, Zap, type LucideIcon } from "lucide-react";
+import { ClipboardPaste, Download, Eye, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
@@ -39,36 +39,24 @@ const STEPS: Step[] = [
 // approximates step 2's elevated position vs. steps 1/3's shared lower
 // baseline.
 //
-// REGRESSION, found and fixed: the original version used a cubic bezier
-// with flat tangents at both ends (`C 280 150 390 70 500 70`) - a smooth
-// S-curve/easing shape designed to transition between two elevations,
-// not a bulging arc. Its curviest parts sit right at the flat-tangent
-// zones near each endpoint, which are exactly the parts masked by the
-// opaque Cards. Confirmed live (getBoundingClientRect on both the cards
-// and the SVG, not eyeballed): at 1440px, only normalized x in
-// [262, 369] is ever actually visible in the gap - the curve's
-// near-linear transitional midsection. Sampling that exact window's
-// slope at three points showed it varying by only ~9% end to end - it
-// was never going to read as curved, no matter how wide the gap.
-// Switched to a single quadratic control point pulled well above both
-// endpoints (a genuine upward bulge, not an easing transition) -
-// re-sampled the same visible window afterward and confirmed the slope
-// now varies ~31%, and confirmed the difference visually via screenshot
-// before calling it fixed.
+// Arc shape: a single quadratic control point pulled well above both
+// endpoints (a genuine upward bulge, not a flat-tangent easing curve -
+// see KNOWN_ISSUES-style history in git log for why the earlier cubic
+// version rendered as a near-straight line once the opaque Cards masked
+// its flat-tangent zones).
 const ARC_1_2 = "M 170 150 Q 335 30 500 70";
 const ARC_2_3 = "M 500 70 Q 665 30 830 150";
-// Sits near the very bottom of the row (y=370 of 400), well below the
-// arcs' zone and below the elevated middle card's bottom edge -
-// deliberately separated so it reads as its own distinct "these three
-// are still one sequence" line, not visual noise piled on the arcs.
-const BASELINE_1_3 = "M 170 370 L 830 370";
+// Sits roughly level with cards 1/3's icon zone, well above the very
+// bottom of the row - reads as a distinct "these three are still one
+// sequence" line without crowding the description text below it.
+const BASELINE_1_3 = "M 170 230 L 830 230";
 
 // Quadratic midpoints of the two arcs above (t=0.5, hand-computed, not
 // guessed), plus the straight line's own midpoint.
 const CONNECTOR_DOTS = [
   { left: "33.5%", top: "17.5%" },
   { left: "66.5%", top: "17.5%" },
-  { left: "50%", top: "92.5%" },
+  { left: "50%", top: "57.5%" },
 ];
 
 function GlowingDot({ left, top }: { left: string; top: string }) {
@@ -148,27 +136,42 @@ export function HowItWorks() {
       className="container py-16 sm:py-24"
     >
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
-        <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium text-muted-foreground shadow-[0_0_24px_-6px_hsl(var(--primary)/0.5)]">
+          <Sparkles className="h-3 w-3 text-primary" aria-hidden="true" />
           Getting started
         </span>
-        <h2 className="text-h2">How it works</h2>
+        <h2 className="text-h2">
+          How it{" "}
+          <span className="bg-hero-gradient bg-clip-text text-transparent">works</span>
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Three simple steps to download Instagram content in original quality.
+        </p>
       </div>
 
-      <div className="relative mx-auto mt-12 max-w-4xl">
+      <div className="relative mx-auto mt-16 max-w-4xl">
         {/* Arc connectors + glowing dots - lg:+ only. Below lg, the
             composition falls back to a flat, unconnected 3-column row
             (sm:-lg:) or a stacked single column (below sm:) - neither
             can sensibly hold curved SVG paths, so no connector of any
             kind renders there rather than a compressed/broken arc. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
-          <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full">
+          <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+            {/* Soft blurred glow layer, static (not animated) - sits
+                behind the crisp animated line below, same "halo behind a
+                solid core" technique as GlowingDot, just applied to a
+                path instead of a point. */}
+            <g className="opacity-70 blur-[6px]">
+              <path d={ARC_1_2} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
+              <path d={ARC_2_3} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
+            </g>
             {/* Draws in after the cards' own whileInView (0.35s, no
                 delay) - a short stagger so it reads as "the connection
                 draws itself in after the steps appear," not everything
                 happening at once. */}
             <motion.path
               d={ARC_1_2}
-              className="fill-none stroke-primary/40"
+              className="fill-none stroke-primary/80"
               strokeWidth={2.5}
               vectorEffect="non-scaling-stroke"
               {...pathDrawProps}
@@ -176,7 +179,7 @@ export function HowItWorks() {
             />
             <motion.path
               d={ARC_2_3}
-              className="fill-none stroke-primary/40"
+              className="fill-none stroke-primary/80"
               strokeWidth={2.5}
               vectorEffect="non-scaling-stroke"
               {...pathDrawProps}
@@ -215,14 +218,16 @@ export function HowItWorks() {
                 index !== 1 && "lg:mt-20"
               )}
             >
-              <div className="relative">
-                <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <step.icon className="h-6 w-6" aria-hidden="true" />
-                </span>
-                <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-primary text-[11px] font-bold text-primary-foreground">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-              </div>
+              {/* Straddles the card's own top edge, centered - same
+                  position on all three cards, unlike the previous
+                  pass's icon-corner overlap (which drifted visually
+                  depending on the icon box's own size). */}
+              <span className="absolute -top-3.5 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 border-card bg-primary text-xs font-bold text-primary-foreground">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="flex h-14 w-14 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                <step.icon className="h-6 w-6" aria-hidden="true" />
+              </span>
               <div className="flex flex-col gap-1.5">
                 <h3 className="text-h3">{step.title}</h3>
                 {/* min-h reserves 3 lines' worth of space (text-sm's
@@ -237,19 +242,20 @@ export function HowItWorks() {
         </div>
       </div>
 
-      <Card className="mx-auto mt-8 flex max-w-4xl flex-col items-center justify-between gap-4 p-6 text-center sm:flex-row sm:text-left">
+      <div className="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4 rounded-full border border-border bg-card px-6 py-4 text-center shadow-sm sm:flex-row sm:justify-between sm:text-left">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Zap className="h-5 w-5" aria-hidden="true" />
           </span>
-          <p className="text-sm text-muted-foreground">
-            No login required. No watermark. Original quality — every time.
-          </p>
+          <div className="flex flex-col">
+            <p className="text-sm font-semibold">No login required. No watermark.</p>
+            <p className="text-sm text-muted-foreground">Original quality, every time.</p>
+          </div>
         </div>
-        <Button onClick={scrollToInput} className="w-full sm:w-auto">
+        <Button onClick={scrollToInput} className="w-full rounded-full sm:w-auto">
           Try it now
         </Button>
-      </Card>
+      </div>
     </motion.section>
   );
 }
