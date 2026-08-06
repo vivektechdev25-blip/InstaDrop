@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { ClipboardPaste, Download, Eye, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -57,7 +58,16 @@ const CONNECTOR_DOTS = [
 
 function GlowingDot({ left, top }: { left: string; top: string }) {
   return (
-    <div aria-hidden="true" className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2" style={{ left, top }}>
+    <div
+      aria-hidden="true"
+      // motion-safe: is a pure CSS media-query variant (prefers-reduced-
+      // motion: no-preference) - the pulse simply doesn't apply under
+      // reduced motion, no JS check needed for this piece. Scoped to
+      // these small connector dots only; the hero glow stays static per
+      // the earlier, separate decision.
+      className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 motion-safe:animate-dot-pulse"
+      style={{ left, top }}
+    >
       <div className="absolute inset-0 -m-1.5 rounded-full bg-primary/40 blur-md" />
       <div className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-primary" />
     </div>
@@ -75,6 +85,45 @@ function scrollToInput() {
 }
 
 export function HowItWorks() {
+  // Explicit gate, not assumed: framer-motion's whileInView/pathLength
+  // animation isn't disabled by prefers-reduced-motion on its own - this
+  // project hasn't needed to handle that media feature before now.
+  //
+  // Went through three real, live-verified bugs to land here:
+  // 1. First attempt omitted initial/whileInView entirely for reduced
+  //    motion (rather than explicitly setting pathLength: 1) - left
+  //    motion.path's default pathLength at 0, so the arcs never became
+  //    visible at all, confirmed via getComputedStyle sampled over a
+  //    full second, not a single snapshot.
+  // 2. Conditionally swapping WHICH props got passed (static branch vs.
+  //    animated branch, based on mount state + prefers-reduced-motion)
+  //    fixed that, but broke the animation for everyone: framer-motion
+  //    only reads `initial` on a component's first mount - changing
+  //    props on a later re-render is silently ignored, so paths just
+  //    stayed wherever the first render left them. Also, since the
+  //    server can never resolve a matchMedia query, server and the
+  //    client's first paint disagreed on which branch to take,
+  //    producing a real React hydration-mismatch warning (confirmed
+  //    live: "Server: 1px 1px, Client: 0px 1px" on every load).
+  // 3. Landed on keeping initial/whileInView IDENTICAL on every render
+  //    (server and client always agree - no hydration mismatch, and
+  //    framer-motion's first-mount-only `initial` is never swapped out
+  //    from under itself) and gating only the transition's duration -
+  //    0ms (an instant, imperceptible snap to the fully-drawn state)
+  //    for reduced motion, the real animated duration otherwise. This
+  //    satisfies "elements simply being present" for reduced-motion
+  //    users without fighting framer-motion's actual mount model.
+  const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  useEffect(() => setMounted(true), []);
+
+  const reduceMotion = mounted && prefersReducedMotion === true;
+  const pathDrawProps = {
+    initial: { pathLength: 0 },
+    whileInView: { pathLength: 1 },
+    viewport: { once: true, margin: "-80px" },
+  };
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
@@ -98,14 +147,34 @@ export function HowItWorks() {
             kind renders there rather than a compressed/broken arc. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
           <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full">
-            <path d={ARC_1_2} className="fill-none stroke-primary/40" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
-            <path d={ARC_2_3} className="fill-none stroke-primary/40" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
-            <path
+            {/* Draws in after the cards' own whileInView (0.35s, no
+                delay) - a short stagger so it reads as "the connection
+                draws itself in after the steps appear," not everything
+                happening at once. */}
+            <motion.path
+              d={ARC_1_2}
+              className="fill-none stroke-primary/40"
+              strokeWidth={2.5}
+              vectorEffect="non-scaling-stroke"
+              {...pathDrawProps}
+              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.25 }}
+            />
+            <motion.path
+              d={ARC_2_3}
+              className="fill-none stroke-primary/40"
+              strokeWidth={2.5}
+              vectorEffect="non-scaling-stroke"
+              {...pathDrawProps}
+              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.25 }}
+            />
+            <motion.path
               d={BASELINE_1_3}
               className="fill-none stroke-primary/25"
               strokeWidth={2}
               strokeDasharray="4 6"
               vectorEffect="non-scaling-stroke"
+              {...pathDrawProps}
+              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.4 }}
             />
           </svg>
           {CONNECTOR_DOTS.map((dot) => (

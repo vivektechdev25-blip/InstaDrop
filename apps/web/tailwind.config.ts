@@ -134,6 +134,17 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // HowItWorks' connector dots only - explicitly NOT used on the
+        // hero glow, which stays fully static by earlier decision. Low
+        // amplitude (0.6->1 opacity, 1->1.15 scale) since these are a
+        // small supporting detail, not a large background element.
+        // Gated by the motion-safe: variant at the call site, not here -
+        // prefers-reduced-motion removes it via pure CSS media query,
+        // no JS check needed for this piece.
+        "dot-pulse": {
+          "0%, 100%": { opacity: "0.6", transform: "scale(1)" },
+          "50%": { opacity: "1", transform: "scale(1.15)" },
+        },
       },
       animation: {
         // 150-300ms range project-wide: ease-out for entrances (feels like
@@ -147,6 +158,7 @@ const config: Config = {
         shimmer: "shimmer 2s infinite linear",
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-in",
+        "dot-pulse": "dot-pulse 2.5s ease-in-out infinite",
       },
     },
   },
