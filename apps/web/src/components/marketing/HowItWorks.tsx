@@ -215,7 +215,7 @@ export function HowItWorks() {
                 "relative flex min-w-0 flex-col items-center gap-4 p-6 text-center",
                 // Steps 1 and 3 sit at a shared lower baseline; step 2
                 // (index 1) stays elevated at the row's top edge.
-                index !== 1 && "lg:mt-20"
+                index !== 1 && "lg:mt-32"
               )}
             >
               {/* Straddles the card's own top edge, centered - same
