@@ -111,6 +111,7 @@ export function HowItWorks() {
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.35, ease: "easeOut" }}
       className="container py-16 sm:py-24"
+      data-scroll-reveal
     >
       <div className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium text-muted-foreground shadow-[0_0_24px_-6px_hsl(var(--primary)/0.5)]">

@@ -113,3 +113,20 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* HowItWorks/FeatureList/Faq fade in via framer-motion's whileInView,
+   which needs a real, rendered intermediate scroll frame to fire its
+   IntersectionObserver - confirmed live that print rendering (Ctrl+P /
+   Save as PDF) never produces one, since the whole page is laid out for
+   print without ever scrolling. Without this override, those three
+   sections print/export as blank space (stuck at their opacity:0 initial
+   state) even though their content is present in the DOM. Print is the
+   one confirmed-reachable real path for this - normal scrolling (wheel,
+   touch, trackpad, even a keyboard "End" press) reliably fires the
+   observer, verified separately. */
+@media print {
+  [data-scroll-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

@@ -12,6 +12,7 @@ export function Faq() {
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.35, ease: "easeOut" }}
       className="container py-16 sm:py-24"
+      data-scroll-reveal
     >
       <div className="mx-auto max-w-xl text-center">
         <h2 className="text-h2">Frequently asked questions</h2>
