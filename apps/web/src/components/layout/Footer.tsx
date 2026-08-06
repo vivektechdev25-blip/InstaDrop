@@ -14,21 +14,23 @@ const SUPPORTED_CONTENT = "Photos · Reels · Videos · Carousels";
 export function Footer() {
   return (
     <footer className="border-t border-border">
-      <div className="container flex flex-col items-center gap-8 py-12 text-center">
+      <div className="container flex flex-col items-center gap-5 py-8 text-center">
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Download className="h-4 w-4" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Download className="h-3.5 w-3.5" />
           </span>
-          <span className="bg-hero-gradient bg-clip-text text-h3 text-transparent">Instadrop</span>
+          <span className="bg-hero-gradient bg-clip-text text-lg text-transparent">Instadrop</span>
         </Link>
 
-        <div className="flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-2">
           <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-2 text-sm text-muted-foreground">
             {LEGAL_LINKS.map((link) => (
               // py-3 pads the text's ~22px line-height up to the 44px WCAG
               // 2.5.5 / Apple HIG touch-target minimum, same standard
               // already enforced elsewhere (Button, Dialog close, paste
               // button) - a plain text link with no padding falls short.
+              // The surrounding gaps were shrunk instead, since this
+              // padding already carries most of the row's visual space.
               <Link
                 key={link.href}
                 href={link.href}
@@ -39,7 +41,7 @@ export function Footer() {
             ))}
           </nav>
 
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supports</span>
             <p className="text-sm text-muted-foreground">{SUPPORTED_CONTENT}</p>
           </div>
