@@ -72,7 +72,10 @@ export function FeatureList() {
       data-scroll-reveal
     >
       <div className="mx-auto max-w-xl text-center">
-        <h2 className="text-h2">Why {siteConfig.name}</h2>
+        <h2 className="text-h2">
+          Why{" "}
+          <span className="bg-hero-gradient bg-clip-text text-transparent">{siteConfig.name}</span>
+        </h2>
       </div>
 
       <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">

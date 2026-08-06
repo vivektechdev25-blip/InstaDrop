@@ -15,7 +15,10 @@ export function Faq() {
       data-scroll-reveal
     >
       <div className="mx-auto max-w-xl text-center">
-        <h2 className="text-h2">Frequently asked questions</h2>
+        <h2 className="text-h2">
+          Frequently asked{" "}
+          <span className="bg-hero-gradient bg-clip-text text-transparent">questions</span>
+        </h2>
       </div>
 
       <Accordion type="single" collapsible className="mx-auto mt-10 max-w-2xl">
