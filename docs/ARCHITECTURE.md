@@ -48,6 +48,35 @@ instadrop-monorepo/
 
 **Rule:** Never create "God Components" or "God Functions." One file = one responsibility. All business logic lives in `services/` — controllers stay thin and only orchestrate.
 
+## Branding: single source of truth (`siteConfig.ts`)
+
+`apps/web/src/lib/siteConfig.ts` owns every piece of branding text that appears in more than one place — `name`, `title`, `description`, `tagline`, and `url`. A rename or tagline change should be a one-line edit here, not a find-and-replace. Audited and centralized 2026-08-05; before that pass, the name was hardcoded in seven separate places.
+
+**Consumers (all read from `siteConfig`, none hold a literal):**
+
+```
+siteConfig.ts
+  |-- app/layout.tsx            title/description, OG + Twitter tags,
+  |                              appleWebApp.title, WebApplication JSON-LD
+  |-- app/manifest.ts           name / short_name / description
+  |-- app/opengraph-image.tsx   rendered name + tagline
+  |-- app/robots.ts             sitemap URL
+  |-- app/sitemap.ts            all route URLs
+  |-- app/(legal)/*/page.tsx    each page's metadata.description
+  |-- components/layout/Navbar.tsx    wordmark
+  |-- components/layout/Footer.tsx    wordmark + copyright line
+  |-- components/pwa/InstallModal.tsx dialog title
+  `-- components/marketing/FeatureList.tsx  "Why {name}" heading
+```
+
+**Explicitly not derived from the domain.** A custom domain and a brand name are independent things; nothing inspects `window.location.hostname` to guess the display name. `siteConfig.url` reads `NEXT_PUBLIC_SITE_URL` (env), while the name/tagline are plain config values — changing one never implicitly changes the other.
+
+**Two deliberate exceptions, both documented in-code:**
+1. **The hero `<h1>`** (`DownloaderPage.tsx`) duplicates `siteConfig.tagline`'s wording as hand-written JSX, because it highlights "original quality" in its own gradient `<span>` — a single plain string can't express that. The comment there flags that the two must be updated together.
+2. **Legal-page prose and FAQ copy** keep `Instadrop` as literal text (~30 mentions across `terms`, `privacy-policy`, `faqData.ts`). Interpolating a config value into every sentence of a legal document makes the source materially harder to read for little real benefit — a genuine rebrand needs a human/legal re-read of that prose regardless. Only the *structural* label-level text (page `metadata.description`, headings, wordmarks) is centralized.
+
+**Manifest note:** `public/manifest.json` (static, fully duplicated name/description) was replaced by `app/manifest.ts` so it could import `siteConfig`. Next.js serves that file convention at **`/manifest.webmanifest`**, not `/manifest.json` — so `layout.tsx`'s `metadata.manifest` and `public/sw.js`'s `APP_SHELL_URLS` both needed updating. The service-worker one was load-bearing: `cache.addAll()` rejects its entire install step if any single precached URL 404s, so a missed reference there would have silently broken offline support. Its `CACHE_NAME` was bumped to `v2` so already-installed workers re-precache rather than retaining the stale list.
+
 ## Tech stack
 
 ### Frontend

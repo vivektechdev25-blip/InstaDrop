@@ -73,6 +73,11 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
             className="pointer-events-none absolute left-[62%] top-[14%] -z-10 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-hero-glow-accent/[0.014] blur-3xl dark:bg-hero-glow-accent/[0.12]"
           />
 
+          {/* Kept as hand-written JSX rather than sourced from
+              siteConfig.tagline - this heading needs "original quality"
+              styled in its own gradient span below, which a single plain
+              string can't express. If siteConfig.tagline ever changes,
+              this heading needs a manual matching update. */}
           <h1 className="max-w-3xl text-display tracking-tight">
             Download Instagram photos, reels &amp; videos in{" "}
             {/* Large text (40-48px/800 weight) qualifies for WCAG's 3:1

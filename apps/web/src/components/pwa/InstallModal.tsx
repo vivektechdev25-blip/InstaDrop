@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
+import { siteConfig } from "@/lib/siteConfig";
 
 // Doesn't compete with the user's first action on the page (e.g. pasting
 // a URL) by appearing the instant it becomes eligible.
@@ -52,7 +53,7 @@ export function InstallModal() {
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Download className="h-5 w-5" aria-hidden="true" />
             </span>
-            <DialogTitle>Install Instadrop</DialogTitle>
+            <DialogTitle>Install {siteConfig.name}</DialogTitle>
           </div>
           <DialogDescription id="install-modal-description">
             Install the app for faster access, better performance, and a native app

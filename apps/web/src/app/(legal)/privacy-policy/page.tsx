@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { LegalSection } from "@/components/legal/LegalSection";
+import { siteConfig } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "How Instadrop handles data: what we collect, what we don't, and why.",
+  description: `How ${siteConfig.name} handles data: what we collect, what we don't, and why.`,
   alternates: { canonical: "/privacy-policy" },
 };
 

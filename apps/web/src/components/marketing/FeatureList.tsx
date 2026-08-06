@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Layers, Link, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { AddressBarExample } from "@/components/marketing/AddressBarExample";
+import { siteConfig } from "@/lib/siteConfig";
 import { cn } from "@/lib/utils";
 
 interface Feature {
@@ -70,7 +71,7 @@ export function FeatureList() {
       className="container py-16 sm:py-24"
     >
       <div className="mx-auto max-w-xl text-center">
-        <h2 className="text-h2">Why Instadrop</h2>
+        <h2 className="text-h2">Why {siteConfig.name}</h2>
       </div>
 
       <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { Download, Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { siteConfig } from "@/lib/siteConfig";
 import { cn } from "@/lib/utils";
 
 // Pulls in framer-motion - not needed until a mobile visitor opens the
@@ -35,7 +36,7 @@ export function Navbar() {
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Download className="h-4 w-4" />
           </span>
-          <span className="bg-hero-gradient bg-clip-text text-h3 text-transparent">Instadrop</span>
+          <span className="bg-hero-gradient bg-clip-text text-h3 text-transparent">{siteConfig.name}</span>
         </Link>
 
         <div className="hidden items-center gap-6 md:flex">

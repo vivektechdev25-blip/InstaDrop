@@ -17,7 +17,10 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
-  manifest: "/manifest.json",
+  // app/manifest.ts (Next.js's file-convention route) generates this at
+  // /manifest.webmanifest, not /manifest.json - confirmed live after
+  // switching from the old static public/manifest.json.
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-192.png",
     apple: "/apple-icon.png",

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { LegalSection } from "@/components/legal/LegalSection";
+import { siteConfig } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "The terms that govern your use of Instadrop.",
+  description: `The terms that govern your use of ${siteConfig.name}.`,
   alternates: { canonical: "/terms" },
 };
 

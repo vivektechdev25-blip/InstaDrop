@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
+import { siteConfig } from "@/lib/siteConfig";
 
 const LEGAL_LINKS = [
   { href: "/privacy-policy", label: "Privacy Policy" },
@@ -19,7 +20,7 @@ export function Footer() {
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Download className="h-3.5 w-3.5" />
           </span>
-          <span className="bg-hero-gradient bg-clip-text text-lg text-transparent">Instadrop</span>
+          <span className="bg-hero-gradient bg-clip-text text-lg text-transparent">{siteConfig.name}</span>
         </Link>
 
         <div className="flex flex-col items-center gap-1">
@@ -50,7 +51,7 @@ export function Footer() {
         <div className="w-full max-w-xs border-t border-border" aria-hidden="true" />
 
         <p className="text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} Instadrop. Not affiliated with Instagram or Meta.
+          &copy; {new Date().getFullYear()} {siteConfig.name}. Not affiliated with Instagram or Meta.
         </p>
       </div>
     </footer>

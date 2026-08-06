@@ -12,11 +12,11 @@ SEO is built in from day one, not an afterthought.
 - JSON-LD structured data using the `WebApplication` schema — see `apps/web/src/app/layout.tsx`
 - `FAQPage` JSON-LD structured data on the homepage — see below
 - OG image — auto-generated via `apps/web/src/app/opengraph-image.tsx` (Next.js `next/og` convention); Next.js wires the `og:image`/`twitter:image` meta tags to it automatically
-- PWA manifest — see `apps/web/public/manifest.json`
+- PWA manifest — generated dynamically via `apps/web/src/app/manifest.ts` (Next.js file convention), served at `/manifest.webmanifest`. Converted from a static `public/manifest.json` on 2026-08-05 specifically so it reads its name/description from `siteConfig` instead of duplicating them (see below).
 
 ## Site config
 
-`apps/web/src/lib/siteConfig.ts` is the single source of truth for the site's canonical URL (`NEXT_PUBLIC_SITE_URL`, defaults to `https://instadrop.app`), name, and description — reused by `layout.tsx`, `sitemap.ts`, and `robots.ts` so they can't drift out of sync with each other.
+`apps/web/src/lib/siteConfig.ts` is the single source of truth for the site's branding — canonical URL (`NEXT_PUBLIC_SITE_URL`, defaults to `https://instadrop.app`), `name`, `title`, `description`, and `tagline`. See [ARCHITECTURE.md](./ARCHITECTURE.md#branding-single-source-of-truth-siteconfigts) for the full list of consumers and the two deliberate exceptions.
 
 ## Targets
 

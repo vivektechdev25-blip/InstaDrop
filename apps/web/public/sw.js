@@ -1,5 +1,12 @@
-const CACHE_NAME = "instadrop-shell-v1";
-const APP_SHELL_URLS = ["/", "/manifest.json"];
+// v2: manifest moved from the static public/manifest.json to the
+// app/manifest.ts file-convention route, served at /manifest.webmanifest
+// instead - the old URL 404s now. cache.addAll() fails its entire
+// install step if any single precached URL 404s, so this had to be
+// updated here too, not just in layout.tsx's metadata.manifest
+// reference. Cache name bumped so existing installed service workers
+// re-precache with the corrected URL rather than keeping a stale list.
+const CACHE_NAME = "instadrop-shell-v2";
+const APP_SHELL_URLS = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

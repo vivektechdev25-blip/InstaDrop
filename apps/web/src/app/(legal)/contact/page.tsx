@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { Mail } from "lucide-react";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { LegalSection } from "@/components/legal/LegalSection";
+import { siteConfig } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Get in touch with the Instadrop team.",
+  description: `Get in touch with the ${siteConfig.name} team.`,
   alternates: { canonical: "/contact" },
 };
 

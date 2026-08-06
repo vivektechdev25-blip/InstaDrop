@@ -40,7 +40,7 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 56, fontWeight: 700 }}>{siteConfig.name}</div>
         </div>
         <div style={{ fontSize: 30, color: "#a1a1aa", maxWidth: 860, textAlign: "center" }}>
-          Download Instagram photos, reels &amp; videos in original quality
+          {siteConfig.tagline}
         </div>
       </div>
     ),
