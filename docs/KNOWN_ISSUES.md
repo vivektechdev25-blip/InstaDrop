@@ -12,6 +12,10 @@ Real screenshot from a live device showed the header reading "@unknown" while th
 
 **Was silently present in past `PreviewCard` verification passes** (see [TESTING.md](./TESTING.md), [CHANGELOG.md](./CHANGELOG.md), [TODO.md](./TODO.md)) - every prior real post used for testing happened to have a caption, so this never surfaced until a real captionless post was hit live.
 
+## PreviewCard had an unintended hover-lift — fixed 2026-08-06
+
+`PreviewCard` used the shared `Card` primitive as-is, inheriting its site-wide hover lift/shadow/border polish (intended for inviting-a-click surfaces like `FeatureList`/`HowItWorks`). Since `PreviewCard` displays the user's actual fetched result rather than a clickable promotional tile, the lift read as an unintentional glitch. Added an `interactive` prop to `Card` (defaults `true`, so every other usage is unchanged) and set `interactive={false}` on `PreviewCard`'s usage specifically - a scoped opt-out, not a global style change. Confirmed live: `PreviewCard`'s computed `transform` no longer changes on hover, while a `FeatureList` card's still does (`none` → `matrix(1, 0, 0, 1, 0, -2)`). The internal "Download video" button's own hover state (`Button`'s own `hover:opacity-90 hover:shadow-md`, entirely separate classes) is unaffected.
+
 ## Homepage depth pass (2026-08-05): Lighthouse caught a real, pre-existing contrast bug
 
 Building the new marketing sections (`TrustBar`, `HowItWorks`, `FeatureList`, `Faq`) prompted a fresh Lighthouse run against the production build - standard due diligence, not something the spec explicitly asked for. It caught a real defect unrelated to the new content.

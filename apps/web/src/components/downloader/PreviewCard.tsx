@@ -27,7 +27,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
   }
 
   return (
-    <Card className="mx-auto max-w-md text-left animate-fade-in">
+    <Card interactive={false} className="mx-auto max-w-md text-left animate-fade-in">
       <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
         <p className="text-sm font-semibold">@{post.author.username || "unknown"}</p>
       </CardHeader>

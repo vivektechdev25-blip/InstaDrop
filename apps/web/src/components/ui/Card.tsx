@@ -1,18 +1,24 @@
 import { HTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  function Card({ className, ...props }, ref) {
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  // Defaults true - the hover lift/shadow/border polish applies to every
+  // Card site-wide (FeatureList's grid, HowItWorks's steps) since it's
+  // fixed here at the shared primitive rather than per usage. Opt out for
+  // cards that display fetched/result content rather than inviting a
+  // click (PreviewCard) - a hover-lift there reads as a stray UI glitch,
+  // not an interaction cue, since the card itself isn't clickable.
+  interactive?: boolean;
+}
+
+export const Card = forwardRef<HTMLDivElement, CardProps>(
+  function Card({ className, interactive = true, ...props }, ref) {
     return (
       <div
         ref={ref}
         className={cn(
-          // Hover polish applies to every Card site-wide (FeatureList's
-          // grid, PreviewCard's result) since it's fixed here at the
-          // shared primitive rather than per usage - a subtle lift +
-          // shadow + primary-tinted border, same 150-300ms ease-out
-          // convention as the rest of the app's motion.
-          "rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
+          "rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-all duration-200 ease-out",
+          interactive && "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
           className
         )}
         {...props}
