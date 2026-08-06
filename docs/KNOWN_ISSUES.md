@@ -12,11 +12,19 @@ Building the new marketing sections (`TrustBar`, `HowItWorks`, `FeatureList`, `F
 
 **Fix:** `--primary` in dark mode moved from 65% to 63% lightness - solved algebraically (via the same manual contrast calculation), not by trial and error, landing at ~4.6:1 with a small margin while staying close to the original color. Re-ran Lighthouse after the fix: Accessibility back to 100.
 
-## Homepage depth pass (2026-08-05): whileInView + full-page screenshots
+## Homepage depth pass (2026-08-05): whileInView + full-page screenshots — corrected 2026-08-06, this WAS partly a real bug
 
-Not a product bug - a testing-methodology gotcha worth recording so it isn't rediscovered. `HowItWorks`/`FeatureList`/`Faq` fade in via Framer Motion's `whileInView`, which relies on `IntersectionObserver` actually firing as a section enters the viewport. A first-pass `fullPage` Playwright screenshot (no scrolling beforehand) showed those three sections as blank space - confirmed via DOM inspection that the content was genuinely present (right text, right section count, zero console errors), just still at its `opacity: 0` initial animation state, because a `fullPage` capture doesn't scroll through the page the way a real visitor does.
+Originally recorded as "not a product bug - a testing-methodology gotcha." That conclusion was incomplete, corrected during the 2026-08-06 full-project verification pass below.
 
-**Fix (to the test, not the app):** scroll through the full page height in discrete steps before capturing, which lets each section's observer fire naturally, then screenshot. This is exactly what a real visitor scrolling down the page experiences - the bug only existed in the verification script's shortcut, not in the shipped behavior.
+`HowItWorks`/`FeatureList`/`Faq` fade in via Framer Motion's `whileInView`, which relies on `IntersectionObserver` actually firing as a section enters the viewport. A first-pass `fullPage` Playwright screenshot (no scrolling beforehand) showed those three sections as blank space - confirmed via DOM inspection that the content was genuinely present (right text, right section count, zero console errors), just still at its `opacity: 0` initial animation state, because a `fullPage` capture doesn't scroll through the page the way a real visitor does.
+
+**What's still correct:** for a real visitor, this is genuinely not a bug. Live-verified three ways: incremental scroll (wheel/touch equivalent), a single instant `scrollTo()` jump followed by real continuous scrolling, and a real keyboard `End` key press (which Chrome animates by default, producing intermediate frames) - all correctly reveal every section. Fixing the verification script to scroll before screenshotting (as originally described below) remains valid and necessary for accurate screenshots.
+
+**What was missed the first time, found 2026-08-06:** print rendering (`Ctrl+P` / Save as PDF) never scrolls at all - the whole page is laid out for print in one pass. Live-verified via `page.emulateMedia({ media: "print" })`: `FeatureList` and `Faq` printed as genuinely blank space, permanently stuck at `opacity: 0`, since their `IntersectionObserver` never received a rendered frame where they intersected the viewport. This is real, shipped, user-reachable behavior, not a test artifact - no `@media print` handling existed anywhere in the codebase to catch it.
+
+**Fixed:** tagged all three `motion.section` wrappers (`HowItWorks.tsx`, `FeatureList.tsx`, `Faq.tsx`) with a shared `data-scroll-reveal` attribute, and added a `@media print { [data-scroll-reveal] { opacity: 1 !important; transform: none !important; } }` override in `globals.css`. Re-verified live: print emulation now shows all sections at full opacity; normal screen-media scroll-triggered animation is unaffected (confirmed unchanged before/after).
+
+**Test-script fix (original entry, still valid):** scroll through the full page height in discrete steps before capturing a screenshot, which lets each section's observer fire naturally. This reflects real visitor behavior for on-screen verification; it does not, by itself, cover the print case above, which needed an actual code fix.
 
 ## UI polish pass (2026-08-05): audit findings
 
