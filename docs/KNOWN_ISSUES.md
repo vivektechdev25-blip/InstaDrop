@@ -173,6 +173,21 @@ Under the *same* network/CPU conditions, actually applying the throttling (`devt
 
 **Recommendation:** treat 1.475s (`devtools`, real throttling) as the representative number for this page rather than 2.2s (`simulate`, Lighthouse CLI's default). If a stricter reading of the target is wanted, revise it to "<1.5s under directly-applied mobile throttling equivalent to Lighthouse's default profile" rather than chasing Lighthouse CLI's `simulate` mode number specifically, since that mode's own model — not the page — is what's adding the extra ~700ms here.
 
+### LCP re-check 2026-08-06: small genuine regression found, evidenced, and accepted
+
+The ranking-focused SEO audit (see [SEO.md](./SEO.md#lcp-re-investigation-genuine-small-regression-evidenced-and-accepted-not-chased)) re-ran this exact `devtools`-throttled methodology after several homepage visual additions since the original investigation (`HowItWorks`'s SVG arc animations, the hero scale-up, `TrustBar`/`FeatureList`/`Faq`). Result: **1.6s** (score 0.99) — up from the 1.475s baseline above. Re-verified `simulate` mode is still the overestimator it was found to be originally (read 2.6s this time, vs. 2.2s originally — the gap between the two methods held steady, so `simulate`'s own bias hasn't changed). But the `devtools` number itself moved by ~125ms, which the original investigation's numbers didn't — this is a real, if small, increase, not re-explained away by the same methodology finding.
+
+**Evidence chain, same LCP element** (the hero `<h1>`, confirmed unchanged via `lcp-breakdown-insight`):
+- Time to First Byte: ~61ms (trivial, network/server side is not the cause)
+- Element Render Delay: ~1546ms (essentially the entire 1.6s — render-side cost, confirming this is a client CPU/JS story, not a server one)
+- `mainthread-work-breakdown`: Script Evaluation 662ms + Style & Layout 416ms ≈ together roughly matches the render delay — CPU contention under throttling, not one single blocking resource (`render-blocking-resources` flagged nothing)
+- `bootup-time`: heaviest chunk costs 522ms to execute
+- `unused-javascript`: a separate chunk is 72% unused (25.8 KiB of 36 KiB wasted) — consistent with a large animation library where only a fraction of its API surface is exercised on this page
+
+**Attribution:** cumulative `framer-motion` usage growth is the evidenced cause — `HowItWorks`'s new `motion.path` arc-drawing animations added on top of pre-existing `whileInView` usage already present in `FeatureList`, `Faq`, the hero section, and `InstallModal`. Not attributed to a single feature in isolation (usage grew across several passes, not one), and specifically **not** the hero scale-up — that was a typography/CSS-only change with no new JS, ruled out on that basis.
+
+**Decision: accept, don't chase.** 1.6s still scores 0.99/1.0 and sits well inside Google's 2.5s "good" LCP threshold — only ~100ms over this project's own stricter internal <1.5s target, not a real-world ranking risk. The only concrete lever (deferring the `whileInView`-driven JS so it loads later) risks breaking the scroll-reveal animations themselves: they set up an `IntersectionObserver` on mount specifically to catch elements scrolling into view *later*, so delaying that JS's load risks the sections not animating at all, or visibly "popping in" once a deferred script finally arrives — a worse regression than a 125ms LCP delta. Documented here as an investigated, evidenced, and deliberately accepted cost of the recent visual work, not a silently-ignored regression.
+
 ## Private-account detection: unverified, confirmed non-blocking (2026-08-04)
 
 **Decision (2026-08-04):** confirmed with the user that this stays documented as unverified rather than launch-blocking. Rationale: private accounts are rejected either way (worst case, an unrecognized private page falls through to a generic `SERVER_ERROR` instead of the specific `PRIVATE_ACCOUNT` message — no content leaks, no wrong data returned). Revisit only when a real private test URL becomes available; not gating deployment on it.
