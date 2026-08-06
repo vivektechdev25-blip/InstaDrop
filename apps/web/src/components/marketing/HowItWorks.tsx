@@ -35,47 +35,24 @@ const STEPS: Step[] = [
 // actual container via preserveAspectRatio="none" - these are
 // proportions, not pixels, so the arcs reflow correctly across the whole
 // lg:+ width range without any JS measurement. Column x-centers
-// approximate a 3-column grid's midpoints (1/6, 1/2, 5/6); y
-// approximates step 2's elevated position vs. steps 1/3's shared lower
-// baseline.
+// approximate a 3-column grid's midpoints (1/6, 1/2, 5/6).
+//
+// Y endpoints (59 high / 203 low) are computed, not guessed, from the
+// real measured layout: container height = elevation(128) + card
+// height(226) = 354px; each card's icon-badge sits padding(24) +
+// half-icon(28) = 52px from its own card's top. Card 2's icon is 52px
+// from the container top -> 52/354*400 = 58.8. Cards 1/3's icon is
+// elevation-away -> (128+52)/354*400 = 203.4. These need updating
+// together with the `lg:mt-*` elevation value below if it ever changes
+// again - they were previously tuned for an 80px elevation and visibly
+// fell short of reaching card 3 once elevation grew to 128px.
 //
 // Arc shape: a single quadratic control point pulled well above both
 // endpoints (a genuine upward bulge, not a flat-tangent easing curve -
-// see KNOWN_ISSUES-style history in git log for why the earlier cubic
-// version rendered as a near-straight line once the opaque Cards masked
-// its flat-tangent zones).
-const ARC_1_2 = "M 170 150 Q 335 30 500 70";
-const ARC_2_3 = "M 500 70 Q 665 30 830 150";
-// Sits roughly level with cards 1/3's icon zone, well above the very
-// bottom of the row - reads as a distinct "these three are still one
-// sequence" line without crowding the description text below it.
-const BASELINE_1_3 = "M 170 230 L 830 230";
-
-// Quadratic midpoints of the two arcs above (t=0.5, hand-computed, not
-// guessed), plus the straight line's own midpoint.
-const CONNECTOR_DOTS = [
-  { left: "33.5%", top: "17.5%" },
-  { left: "66.5%", top: "17.5%" },
-  { left: "50%", top: "57.5%" },
-];
-
-function GlowingDot({ left, top }: { left: string; top: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      // motion-safe: is a pure CSS media-query variant (prefers-reduced-
-      // motion: no-preference) - the pulse simply doesn't apply under
-      // reduced motion, no JS check needed for this piece. Scoped to
-      // these small connector dots only; the hero glow stays static per
-      // the earlier, separate decision.
-      className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 motion-safe:animate-dot-pulse"
-      style={{ left, top }}
-    >
-      <div className="absolute inset-0 -m-1.5 rounded-full bg-primary/40 blur-md" />
-      <div className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-primary" />
-    </div>
-  );
-}
+// see git log for why an earlier cubic version rendered as a near-
+// straight line once the opaque Cards masked its flat-tangent zones).
+const ARC_1_2 = "M 170 203 Q 335 15 500 59";
+const ARC_2_3 = "M 500 59 Q 665 15 830 203";
 
 // Scrolls to and focuses the exact same input a user would click into
 // manually - no separate/parallel submit path. HowItWorks only ever
@@ -150,17 +127,18 @@ export function HowItWorks() {
       </div>
 
       <div className="relative mx-auto mt-16 max-w-4xl">
-        {/* Arc connectors + glowing dots - lg:+ only. Below lg, the
-            composition falls back to a flat, unconnected 3-column row
-            (sm:-lg:) or a stacked single column (below sm:) - neither
-            can sensibly hold curved SVG paths, so no connector of any
-            kind renders there rather than a compressed/broken arc. */}
+        {/* Arc connectors only - lg:+ only. Below lg, the composition
+            falls back to a flat, unconnected 3-column row (sm:-lg:) or a
+            stacked single column (below sm:) - neither can sensibly
+            hold curved SVG paths, so no connector of any kind renders
+            there rather than a compressed/broken arc. Dots and the
+            straight 1-3 baseline were both removed per explicit
+            request - just the two curves remain. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
           <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full overflow-visible">
             {/* Soft blurred glow layer, static (not animated) - sits
-                behind the crisp animated line below, same "halo behind a
-                solid core" technique as GlowingDot, just applied to a
-                path instead of a point. */}
+                behind the crisp animated line below - a wider, blurred
+                duplicate path for a halo effect. */}
             <g className="opacity-70 blur-[6px]">
               <path d={ARC_1_2} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
               <path d={ARC_2_3} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
@@ -185,19 +163,7 @@ export function HowItWorks() {
               {...pathDrawProps}
               transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.25 }}
             />
-            <motion.path
-              d={BASELINE_1_3}
-              className="fill-none stroke-primary/25"
-              strokeWidth={2}
-              strokeDasharray="4 6"
-              vectorEffect="non-scaling-stroke"
-              {...pathDrawProps}
-              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.4 }}
-            />
           </svg>
-          {CONNECTOR_DOTS.map((dot) => (
-            <GlowingDot key={`${dot.left}-${dot.top}`} {...dot} />
-          ))}
         </div>
 
         {/* lg:gap-24 (well beyond the sm: gap) deliberately opens up more
