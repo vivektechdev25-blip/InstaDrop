@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, ClipboardPaste, Download, Eye, Zap, type LucideIcon } from "lucide-react";
+import { ClipboardPaste, Download, Eye, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
 
 interface Step {
   icon: LucideIcon;
@@ -30,22 +30,36 @@ const STEPS: Step[] = [
   },
 ];
 
-// Sits in the grid's "auto" columns between step cards - hidden below sm:,
-// where the grid switches from 5 columns (card/connector/card/connector/
-// card) back to a single stacked column, so there's nothing horizontal
-// left to connect. pt-6 + h-14 deliberately mirror the step Card's own
-// top padding (p-6) and icon-circle height, so the dotted line/arrow
-// lands at the icon circle's vertical center without guessed pixel values.
-function StepConnector() {
+// Normalized coordinate space (0-1000 x 0-400), stretched to fill the
+// actual container via preserveAspectRatio="none" - these are
+// proportions, not pixels, so the arcs reflow correctly across the whole
+// lg:+ width range without any JS measurement. Column x-centers
+// approximate a 3-column grid's midpoints (1/6, 1/2, 5/6); y
+// approximates step 2's elevated position vs. steps 1/3's shared lower
+// baseline. Exact alignment with each card's icon badge isn't the goal -
+// the opaque Card backgrounds mask each path's endpoints, so only the
+// visible arc in the gap between cards needs to look right.
+const ARC_1_2 = "M 170 150 C 280 150 390 70 500 70";
+const ARC_2_3 = "M 500 70 C 610 70 720 150 830 150";
+// Sits near the very bottom of the row (y=370 of 400), well below the
+// arcs' y=70-150 zone and below the elevated middle card's bottom edge -
+// deliberately separated so it reads as its own distinct "these three
+// are still one sequence" line, not visual noise piled on the arcs.
+const BASELINE_1_3 = "M 170 370 L 830 370";
+
+// Bezier midpoints of the two curves above (De Casteljau at t=0.5, hand-
+// computed, not guessed), plus the straight line's own midpoint.
+const CONNECTOR_DOTS = [
+  { left: "33.5%", top: "27.5%" },
+  { left: "66.5%", top: "27.5%" },
+  { left: "50%", top: "92.5%" },
+];
+
+function GlowingDot({ left, top }: { left: string; top: string }) {
   return (
-    <div aria-hidden="true" className="hidden sm:block">
-      <div className="flex h-14 items-center pt-6">
-        <div className="relative h-px w-full border-t border-dotted border-primary/30">
-          <span className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-primary/20 bg-card">
-            <ArrowRight className="h-4 w-4 text-primary/60" aria-hidden="true" />
-          </span>
-        </div>
-      </div>
+    <div aria-hidden="true" className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2" style={{ left, top }}>
+      <div className="absolute inset-0 -m-1.5 rounded-full bg-primary/40 blur-md" />
+      <div className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-primary" />
     </div>
   );
 }
@@ -76,14 +90,47 @@ export function HowItWorks() {
         <h2 className="text-h2">How it works</h2>
       </div>
 
-      <div
-        role="list"
-        className="mx-auto mt-12 grid max-w-4xl grid-cols-1 items-start gap-10 sm:grid-cols-[1fr_56px_1fr_56px_1fr] sm:gap-0"
-      >
-        {STEPS.map((step, index) => (
-          <Fragment key={step.title}>
-            {index > 0 ? <StepConnector /> : null}
-            <Card role="listitem" className="flex min-w-0 flex-col items-center gap-4 p-6 text-center">
+      <div className="relative mx-auto mt-12 max-w-4xl">
+        {/* Arc connectors + glowing dots - lg:+ only. Below lg, the
+            composition falls back to a flat, unconnected 3-column row
+            (sm:-lg:) or a stacked single column (below sm:) - neither
+            can sensibly hold curved SVG paths, so no connector of any
+            kind renders there rather than a compressed/broken arc. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
+          <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full">
+            <path d={ARC_1_2} className="fill-none stroke-primary/40" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+            <path d={ARC_2_3} className="fill-none stroke-primary/40" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+            <path
+              d={BASELINE_1_3}
+              className="fill-none stroke-primary/25"
+              strokeWidth={2}
+              strokeDasharray="4 6"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+          {CONNECTOR_DOTS.map((dot) => (
+            <GlowingDot key={`${dot.left}-${dot.top}`} {...dot} />
+          ))}
+        </div>
+
+        {/* lg:gap-24 (well beyond the sm: gap) deliberately opens up more
+            horizontal space between cards than usual - the arcs are
+            masked wherever they pass under a Card's opaque background,
+            so a narrow gap leaves only a barely-visible sliver of curve;
+            a wide gap is what actually makes the arc read as a real
+            sweep rather than a stray dash mark. */}
+        <div role="list" className="relative grid grid-cols-1 items-start gap-10 sm:grid-cols-3 sm:gap-6 lg:gap-24">
+          {STEPS.map((step, index) => (
+            <Card
+              key={step.title}
+              role="listitem"
+              className={cn(
+                "relative flex min-w-0 flex-col items-center gap-4 p-6 text-center",
+                // Steps 1 and 3 sit at a shared lower baseline; step 2
+                // (index 1) stays elevated at the row's top edge.
+                index !== 1 && "lg:mt-20"
+              )}
+            >
               <div className="relative">
                 <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <step.icon className="h-6 w-6" aria-hidden="true" />
@@ -97,8 +144,8 @@ export function HowItWorks() {
                 <p className="text-sm text-muted-foreground">{step.description}</p>
               </div>
             </Card>
-          </Fragment>
-        ))}
+          ))}
+        </div>
       </div>
 
       <Card className="mx-auto mt-8 flex max-w-4xl flex-col items-center justify-between gap-4 p-6 text-center sm:flex-row sm:text-left">
