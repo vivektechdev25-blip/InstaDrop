@@ -2,7 +2,7 @@
 
 import { useCallback, useReducer } from "react";
 import type { AxiosError } from "axios";
-import type { ApiErrorResponse, ApiSuccessResponse, InstagramPost } from "@instadrop/types";
+import type { ApiErrorResponse, ApiSuccessResponse, InstagramPost } from "@reelsavehub/types";
 import { apiClient } from "@/lib/apiClient";
 import { cleanInstagramUrl, isValidInstagramUrl } from "@/lib/validators";
 import { cleanSessionCookie, isPlausibleSessionCookie } from "@/lib/privateContentValidators";

@@ -35,7 +35,7 @@ export default function PrivacyPolicyPage() {
       <LegalPageShell sections={SECTIONS}>
         <LegalSection id="overview" title="Overview">
           <p>
-            Instadrop is built around a simple principle: the less of your data we hold,
+            ReelSaveHub is built around a simple principle: the less of your data we hold,
             the less there is to protect, lose, or misuse. There&apos;s no account to
             create, no profile to build, and no media stored on our servers. This page
             explains, section by section, exactly what that means in practice — what
@@ -46,7 +46,7 @@ export default function PrivacyPolicyPage() {
         </LegalSection>
 
         <LegalSection id="what-we-collect" title="What We Collect">
-          <p>Instadrop&apos;s backend processes requests to do its job, but doesn&apos;t build a record of who you are.</p>
+          <p>ReelSaveHub&apos;s backend processes requests to do its job, but doesn&apos;t build a record of who you are.</p>
           <p>
             When you submit a request, our rate limiter briefly holds your IP address in
             memory — only for the duration of the current rate-limit window — purely to
@@ -64,7 +64,7 @@ export default function PrivacyPolicyPage() {
           <p>To be equally clear about what we don&apos;t do:</p>
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">
-              No accounts, sign-in, or user profiles — Instadrop doesn&apos;t ask for a
+              No accounts, sign-in, or user profiles — ReelSaveHub doesn&apos;t ask for a
               username, email address, or password to use the public downloader.
             </li>
             <li className="list-disc">
@@ -93,19 +93,19 @@ export default function PrivacyPolicyPage() {
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">Your light/dark theme choice.</li>
             <li className="list-disc">
-              Whether you&apos;ve installed Instadrop as an app, or dismissed the install
+              Whether you&apos;ve installed ReelSaveHub as an app, or dismissed the install
               prompt, so we don&apos;t ask again on every visit.
             </li>
           </ul>
           <p>
             Because none of this is a tracking or advertising cookie, and none of it is
-            shared with us or anyone else, Instadrop doesn&apos;t show a cookie-consent
+            shared with us or anyone else, ReelSaveHub doesn&apos;t show a cookie-consent
             banner — there&apos;s nothing here that requires one. If you&apos;d rather not
-            keep this locally, clearing your browser&apos;s site data for Instadrop removes
+            keep this locally, clearing your browser&apos;s site data for ReelSaveHub removes
             it.
           </p>
           <p>
-            Instadrop&apos;s installable app also caches its own interface files (the code
+            ReelSaveHub&apos;s installable app also caches its own interface files (the code
             that renders the page) on your device for faster loading and offline access to
             the app shell. It does not cache Instagram media, or responses from our API, on
             your device.
@@ -118,7 +118,7 @@ export default function PrivacyPolicyPage() {
               Sensitive data handling
             </span>
             <p className="text-sm text-foreground">
-              Instadrop&apos;s main tool only works with public content. A separate,
+              ReelSaveHub&apos;s main tool only works with public content. A separate,
               clearly-labelled feature lets you download your own private Reels and posts
               using your own Instagram session cookie — and because that&apos;s a
               genuinely sensitive piece of data, it gets a section of its own, not a
@@ -146,12 +146,12 @@ export default function PrivacyPolicyPage() {
         </LegalSection>
 
         <LegalSection id="third-party-services" title="Third-Party Services We Use">
-          <p>Instadrop keeps its list of third parties short, on purpose:</p>
+          <p>ReelSaveHub keeps its list of third parties short, on purpose:</p>
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">
               Supabase, our database provider, is configured to host anonymized request
               logs — but as described above, that logging isn&apos;t active yet, so
-              Supabase doesn&apos;t currently receive any data from Instadrop. If that
+              Supabase doesn&apos;t currently receive any data from ReelSaveHub. If that
               changes, this section will change with it.
             </li>
             <li className="list-disc">
@@ -161,14 +161,14 @@ export default function PrivacyPolicyPage() {
             </li>
           </ul>
           <p>
-            Instadrop doesn&apos;t use any advertising networks, third-party analytics
+            ReelSaveHub doesn&apos;t use any advertising networks, third-party analytics
             platforms, or session-replay/tracking tools.
           </p>
         </LegalSection>
 
         <LegalSection id="your-rights" title="Your Rights and Choices">
           <p>
-            Because Instadrop doesn&apos;t create an account or a personal profile for
+            Because ReelSaveHub doesn&apos;t create an account or a personal profile for
             you, there generally isn&apos;t a stored personal data record to access,
             correct, or delete beyond what&apos;s already described on this page — the
             request-and-delete process that makes sense for a service with accounts
@@ -177,7 +177,7 @@ export default function PrivacyPolicyPage() {
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">Stop using the service at any time — no account to close, nothing to cancel.</li>
             <li className="list-disc">
-              Clear your browser&apos;s local storage/site data for Instadrop to remove
+              Clear your browser&apos;s local storage/site data for ReelSaveHub to remove
               your saved theme preference and install-prompt history.
             </li>
             <li className="list-disc">
@@ -194,7 +194,7 @@ export default function PrivacyPolicyPage() {
 
         <LegalSection id="childrens-privacy" title="Children's Privacy">
           <p>
-            Instadrop is not directed at children under 13, and we do not knowingly
+            ReelSaveHub is not directed at children under 13, and we do not knowingly
             collect information from anyone, regardless of age — in practice this is
             straightforward, since collecting personal information isn&apos;t part of how
             the service works in the first place.

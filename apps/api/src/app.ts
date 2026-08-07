@@ -21,7 +21,7 @@ app.use(errorHandler);
 
 const port = process.env.PORT ?? 4000;
 const server = app.listen(port, () => {
-  console.log(`Instadrop API listening on port ${port}`);
+  console.log(`ReelSaveHub API listening on port ${port}`);
 });
 
 async function shutdown(): Promise<void> {

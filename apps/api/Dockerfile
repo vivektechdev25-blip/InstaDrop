@@ -26,10 +26,11 @@ RUN pnpm install --frozen-lockfile
 FROM base AS build
 COPY --from=deps /app /app
 COPY . .
-# "..." pulls in @instadrop/api's workspace dependencies (@instadrop/types)
-# so pnpm builds it first - apps/api's own build needs packages/types/dist
-# to already exist to resolve types/JS for the compiled output.
-RUN pnpm --filter "@instadrop/api..." build
+# "..." pulls in @reelsavehub/api's workspace dependencies
+# (@reelsavehub/types) so pnpm builds it first - apps/api's own build needs
+# packages/types/dist to already exist to resolve types/JS for the compiled
+# output.
+RUN pnpm --filter "@reelsavehub/api..." build
 
 FROM base AS runner
 ENV NODE_ENV=production

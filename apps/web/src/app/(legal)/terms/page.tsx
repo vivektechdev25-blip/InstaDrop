@@ -13,7 +13,7 @@ const LAST_UPDATED = "August 5, 2026";
 
 const SECTIONS = [
   { id: "agreement", label: "Agreement to These Terms" },
-  { id: "what-instadrop-does", label: "What Instadrop Does" },
+  { id: "what-reelsavehub-does", label: "What ReelSaveHub Does" },
   { id: "acceptable-use", label: "Acceptable Use" },
   { id: "not-affiliated", label: "Not Affiliated with Instagram or Meta" },
   { id: "intellectual-property", label: "Intellectual Property" },
@@ -34,16 +34,16 @@ export default function TermsPage() {
       <LegalPageShell sections={SECTIONS}>
         <LegalSection id="agreement" title="Agreement to These Terms">
           <p>
-            By using Instadrop, you agree to these terms. If you don&apos;t agree with
+            By using ReelSaveHub, you agree to these terms. If you don&apos;t agree with
             them, please don&apos;t use the service. We&apos;ve tried to write these in
             plain language rather than dense legal boilerplate — if anything here is
             unclear, let us know.
           </p>
         </LegalSection>
 
-        <LegalSection id="what-instadrop-does" title="What Instadrop Does">
+        <LegalSection id="what-reelsavehub-does" title="What ReelSaveHub Does">
           <p>
-            Instadrop&apos;s main tool lets you preview and download media from{" "}
+            ReelSaveHub&apos;s main tool lets you preview and download media from{" "}
             <strong>public</strong> Instagram posts, reels, videos, and carousels by
             pasting a link. It works entirely without an account, and doesn&apos;t store
             any Instagram media on its own servers — everything is streamed directly from
@@ -62,12 +62,12 @@ export default function TermsPage() {
 
         <LegalSection id="acceptable-use" title="Acceptable Use">
           <p>
-            You agree to use Instadrop only for public content you&apos;re legally
+            You agree to use ReelSaveHub only for public content you&apos;re legally
             entitled to access — or, for the own-private-content feature, content that
             genuinely belongs to your own account. You agree not to:
           </p>
           <ul className="flex flex-col gap-2 pl-5">
-            <li className="list-disc">Use Instadrop to access, download, or redistribute content you don&apos;t have the rights to.</li>
+            <li className="list-disc">Use ReelSaveHub to access, download, or redistribute content you don&apos;t have the rights to.</li>
             <li className="list-disc">
               Attempt to use the own-private-content feature to access another
               person&apos;s private account, or to circumvent Instagram&apos;s own privacy
@@ -78,7 +78,7 @@ export default function TermsPage() {
               the service for bulk/automated scraping.
             </li>
             <li className="list-disc">
-              Use Instadrop in any way that violates Instagram&apos;s own Terms of Use, or
+              Use ReelSaveHub in any way that violates Instagram&apos;s own Terms of Use, or
               any applicable law.
             </li>
           </ul>
@@ -86,7 +86,7 @@ export default function TermsPage() {
 
         <LegalSection id="not-affiliated" title="Not Affiliated with Instagram or Meta">
           <p>
-            Instadrop is an independent tool and is not affiliated with, endorsed by, or
+            ReelSaveHub is an independent tool and is not affiliated with, endorsed by, or
             sponsored by Instagram or Meta Platforms, Inc. All Instagram content accessed
             through this service remains the property of its respective owners.
             &quot;Instagram&quot; is a trademark of Meta Platforms, Inc.
@@ -95,9 +95,9 @@ export default function TermsPage() {
 
         <LegalSection id="intellectual-property" title="Intellectual Property">
           <p>
-            Instadrop doesn&apos;t claim any ownership or rights over content you preview
+            ReelSaveHub doesn&apos;t claim any ownership or rights over content you preview
             or download through the service — that content belongs to its original
-            creator, same as it did on Instagram. Instadrop&apos;s own interface, design,
+            creator, same as it did on Instagram. ReelSaveHub&apos;s own interface, design,
             and code are our property (or that of our licensors), and using the service
             doesn&apos;t grant you any rights to them beyond normal use of the site.
           </p>
@@ -105,7 +105,7 @@ export default function TermsPage() {
 
         <LegalSection id="no-warranty" title="No Warranty">
           <p>
-            Instadrop depends on Instagram&apos;s own, publicly-facing infrastructure,
+            ReelSaveHub depends on Instagram&apos;s own, publicly-facing infrastructure,
             which can change without notice. The service is provided &quot;as is,&quot;
             without warranty of any kind, including any guarantee that a given link will
             always successfully resolve, or that the own-private-content feature will
@@ -115,7 +115,7 @@ export default function TermsPage() {
 
         <LegalSection id="limitation-of-liability" title="Limitation of Liability">
           <p>
-            To the fullest extent permitted by law, Instadrop and its operator are not
+            To the fullest extent permitted by law, ReelSaveHub and its operator are not
             liable for any damages arising from your use of, or inability to use, the
             service, including any consequences of downloading or sharing content you
             weren&apos;t entitled to.

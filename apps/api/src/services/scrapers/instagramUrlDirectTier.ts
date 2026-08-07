@@ -1,5 +1,5 @@
 import { instagramGetUrl } from "instagram-url-direct";
-import type { InstagramPost, MediaItem } from "@instadrop/types";
+import type { InstagramPost, MediaItem } from "@reelsavehub/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
 import { extractShortcode } from "./shortcode";

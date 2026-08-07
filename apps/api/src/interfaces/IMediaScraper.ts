@@ -1,4 +1,4 @@
-import type { InstagramPost } from "@instadrop/types";
+import type { InstagramPost } from "@reelsavehub/types";
 
 export interface IMediaScraper {
   readonly tierName: string;

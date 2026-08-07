@@ -10,7 +10,7 @@ export function extractFromQueryParam(searchParams: SearchParams | undefined): s
 }
 
 /**
- * Chrome's address-bar shortcut (instadrop.com/https://instagram.com/...)
+ * Chrome's address-bar shortcut (reelsavehub.com/https://instagram.com/...)
  * produces a path containing "//" after the scheme, but Next.js issues a
  * 308 redirect that collapses consecutive slashes before this route ever
  * sees them - confirmed live via `curl -I` (Location header came back

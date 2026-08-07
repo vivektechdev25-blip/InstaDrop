@@ -1,4 +1,4 @@
-import type { InstagramPost, MediaItem } from "@instadrop/types";
+import type { InstagramPost, MediaItem } from "@reelsavehub/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
 import { getBrowser } from "./browserManager";

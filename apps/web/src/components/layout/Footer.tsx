@@ -8,7 +8,7 @@ const LEGAL_LINKS = [
   { href: "/contact", label: "Contact Us" },
 ];
 
-// Plain text, deliberately not links - Instadrop is one unified flow, not
+// Plain text, deliberately not links - ReelSaveHub is one unified flow, not
 // separate per-content-type pages, so these shouldn't imply otherwise.
 const SUPPORTED_CONTENT = "Photos · Reels · Videos · Carousels";
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
-import type { InstagramPost } from "@instadrop/types";
+import type { InstagramPost } from "@reelsavehub/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { MediaViewer } from "@/components/downloader/MediaViewer";

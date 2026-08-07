@@ -1,4 +1,4 @@
-export type InstadropErrorCode =
+export type ReelSaveHubErrorCode =
   | "INVALID_URL"
   | "PRIVATE_ACCOUNT"
   | "RATE_LIMITED"

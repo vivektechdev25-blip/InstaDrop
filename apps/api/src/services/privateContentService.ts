@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "playwright";
-import type { InstagramPost, MediaItem } from "@instadrop/types";
+import type { InstagramPost, MediaItem } from "@reelsavehub/types";
 import { AppError } from "../errors/AppError";
 import { getBrowser } from "./scrapers/browserManager";
 import { extractShortcode } from "./scrapers/shortcode";

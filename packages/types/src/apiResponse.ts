@@ -1,4 +1,4 @@
-import type { InstadropErrorCode } from "./errors";
+import type { ReelSaveHubErrorCode } from "./errors";
 
 export interface ApiSuccessResponse<TData> {
   success: true;
@@ -12,7 +12,7 @@ export interface ApiErrorResponse {
   message: string;
   data: null;
   errors: Record<string, string[]> | null;
-  code?: InstadropErrorCode;
+  code?: ReelSaveHubErrorCode;
 }
 
 export type ApiResponse<TData> = ApiSuccessResponse<TData> | ApiErrorResponse;

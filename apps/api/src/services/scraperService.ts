@@ -1,4 +1,4 @@
-import type { InstagramPost } from "@instadrop/types";
+import type { InstagramPost } from "@reelsavehub/types";
 import type { IMediaScraper } from "../interfaces/IMediaScraper";
 import { AppError } from "../errors/AppError";
 import { instagramUrlDirectTier } from "./scrapers/instagramUrlDirectTier";

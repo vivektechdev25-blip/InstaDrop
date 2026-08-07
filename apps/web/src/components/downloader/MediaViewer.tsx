@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { MediaItem } from "@instadrop/types";
+import type { MediaItem } from "@reelsavehub/types";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 

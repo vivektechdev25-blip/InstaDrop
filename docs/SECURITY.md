@@ -16,13 +16,13 @@ Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-mem
 
 ## Direct URL mode: auto-fetch throttling
 
-`?url=` and the `instadrop.com/<instagram-url>` catch-all route (see [ARCHITECTURE.md](./ARCHITECTURE.md#direct-url-mode-two-entry-points-one-pipeline)) both auto-trigger a fetch without a manual click — the natural throttle a manual paste provides doesn't exist for either. Two entry points instead of one means this matters more, not less: a scripted loop could otherwise hit `?url=X1`, `?url=X2`, ... or `instadrop.com/<url1>`, `instadrop.com/<url2>`, ... with zero human interaction.
+`?url=` and the `reelsavehub.com/<instagram-url>` catch-all route (see [ARCHITECTURE.md](./ARCHITECTURE.md#direct-url-mode-two-entry-points-one-pipeline)) both auto-trigger a fetch without a manual click — the natural throttle a manual paste provides doesn't exist for either. Two entry points instead of one means this matters more, not less: a scripted loop could otherwise hit `?url=X1`, `?url=X2`, ... or `reelsavehub.com/<url1>`, `reelsavehub.com/<url2>`, ... with zero human interaction.
 
 Mitigations, each confirmed live rather than assumed:
 - **Shared rate limit, no separate budget.** Both entry points call the identical `apiClient.post("/fetch")` used by the manual flow, so they're covered by the same `express-rate-limit` counter (10 req / 10 min / IP) with no code path that could bypass it. Confirmed live: tripped the limiter via direct requests, then verified a fresh request through *each* entry point independently returns the same `RATE_LIMITED` state through the real UI (toast + inline message), not a raw API error.
-- **`noindex` on both.** The catch-all route carries static `robots: { index: false }` metadata; the homepage conditionally sets the same via `generateMetadata` only when `?url=` is present (the plain homepage stays indexable). Confirmed live via `curl` against the rendered `<head>`. Without this, an unbounded number of `?url=<post>` / `instadrop.com/<post>` combinations could otherwise be crawled and indexed as distinct pages.
+- **`noindex` on both.** The catch-all route carries static `robots: { index: false }` metadata; the homepage conditionally sets the same via `generateMetadata` only when `?url=` is present (the plain homepage stays indexable). Confirmed live via `curl` against the rendered `<head>`. Without this, an unbounded number of `?url=<post>` / `reelsavehub.com/<post>` combinations could otherwise be crawled and indexed as distinct pages.
 - **No silent fetching.** The auto-triggered fetch goes through the same `VALIDATING → FETCHING → SUCCESS|ERROR` state machine as a manual submission — the same visible loading skeleton, on both entry points, not a background request the user can't see.
-- **Garbage catch-all paths fail cleanly.** `[...url]` technically matches any unmatched path (e.g. `instadrop.com/some/random/thing`). This is not special-cased — it flows through the same validator that already rejects malformed input, showing the existing friendly error UI. Confirmed live: `HTTP 200`, no stack trace, no unhandled exception, no console errors.
+- **Garbage catch-all paths fail cleanly.** `[...url]` technically matches any unmatched path (e.g. `reelsavehub.com/some/random/thing`). This is not special-cased — it flows through the same validator that already rejects malformed input, showing the existing friendly error UI. Confirmed live: `HTTP 200`, no stack trace, no unhandled exception, no console errors.
 
 ## Download endpoint SSRF protection
 
@@ -90,7 +90,7 @@ Storing Instagram usernames/passwords in the database — plain text or reversib
 - Direct violation of Instagram's Terms of Service
 - Legal exposure under data protection law (GDPR / IT Act)
 
-If revisited, only irreversible hashing (e.g. bcrypt) is acceptable, and only for Instadrop's own authentication — never for storing third-party (Instagram) credentials in recoverable form.
+If revisited, only irreversible hashing (e.g. bcrypt) is acceptable, and only for ReelSaveHub's own authentication — never for storing third-party (Instagram) credentials in recoverable form.
 
 ## Threat model summary
 

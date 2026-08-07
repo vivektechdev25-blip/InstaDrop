@@ -16,7 +16,7 @@ SEO is built in from day one, not an afterthought.
 
 ## Site config
 
-`apps/web/src/lib/siteConfig.ts` is the single source of truth for the site's branding — canonical URL (`NEXT_PUBLIC_SITE_URL`, defaults to `https://instadrop.app`), `name`, `title`, `description`, and `tagline`. See [ARCHITECTURE.md](./ARCHITECTURE.md#branding-single-source-of-truth-siteconfigts) for the full list of consumers and the two deliberate exceptions.
+`apps/web/src/lib/siteConfig.ts` is the single source of truth for the site's branding — canonical URL (`NEXT_PUBLIC_SITE_URL`, defaults to `https://reelsavehub.com`), `name`, `title`, `description`, and `tagline`. See [ARCHITECTURE.md](./ARCHITECTURE.md#branding-single-source-of-truth-siteconfigts) for the full list of consumers and the two deliberate exceptions.
 
 ## Targets
 
@@ -38,7 +38,7 @@ Per-page metadata for the legal pages is no longer generic — each of the three
 A full pass across metadata, structured data, heading hierarchy, semantic HTML, technical SEO, and Core Web Vitals — see [FEATURES.md](./FEATURES.md) for the summary entry. Real evidence throughout, not assumed.
 
 **Already correct, confirmed rather than assumed:**
-- Every page (`/`, `/privacy-policy`, `/terms`, `/contact`) has a unique title/description — no duplicate-description problem. Title template (`%s | Instadrop`) centralized in `layout.tsx`, not repeated per page.
+- Every page (`/`, `/privacy-policy`, `/terms`, `/contact`) has a unique title/description — no duplicate-description problem. Title template (`%s | ReelSaveHub`) centralized in `layout.tsx`, not repeated per page.
 - Exactly one `<h1>` per page (confirmed on `/`, all 3 legal pages, `/private`); homepage h1→h2 (`HowItWorks`/`FeatureList`/`Faq`)→h3 (step titles), legal pages h1→h2 per `LegalSection` — no skipped levels.
 - `<nav>`, `<main>`, `<footer>`, `<article>` all real and correctly used; the legal TOC (both the `lg:`+ sidebar and the mobile accordion) uses genuine `<a href="#section-id">` anchors, not JS-only scroll handlers — crawlable.
 - `/private` and `[...url]` both carry their own `robots: { index: false, follow: false }`; the `?url=` case returns the same conditionally via `generateMetadata`. All three confirmed in code, not assumed.

@@ -1,5 +1,5 @@
 {
-  "name": "@instadrop/api",
+  "name": "@reelsavehub/api",
   "private": true,
   "version": "0.1.0",
   "main": "dist/app.js",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@instadrop/types": "workspace:*",
+    "@reelsavehub/types": "workspace:*",
     "@supabase/supabase-js": "^2.45.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",

@@ -5,7 +5,7 @@
 // updated here too, not just in layout.tsx's metadata.manifest
 // reference. Cache name bumped so existing installed service workers
 // re-precache with the corrected URL rather than keeping a stale list.
-const CACHE_NAME = "instadrop-shell-v2";
+const CACHE_NAME = "reelsavehub-shell-v2";
 const APP_SHELL_URLS = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

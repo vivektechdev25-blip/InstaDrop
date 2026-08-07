@@ -1,10 +1,10 @@
 import { readStorage, removeStorage, writeStorage } from "./storage";
 
-const DISMISSAL_STORAGE_KEY = "instadrop-pwa-dismissal";
-const INSTALLED_STORAGE_KEY = "instadrop-pwa-installed";
-const OPTED_OUT_STORAGE_KEY = "instadrop-pwa-opted-out";
+const DISMISSAL_STORAGE_KEY = "reelsavehub-pwa-dismissal";
+const INSTALLED_STORAGE_KEY = "reelsavehub-pwa-installed";
+const OPTED_OUT_STORAGE_KEY = "reelsavehub-pwa-opted-out";
 
-// Re-show the prompt after whichever comes first. Instadrop is an
+// Re-show the prompt after whichever comes first. ReelSaveHub is an
 // occasional-use utility, not a daily habit app - users often return in
 // bursts every few days, so a pure day-based or pure visit-based cooldown
 // each fail in opposite ways (re-showing mid-task on a quick return visit,

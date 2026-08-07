@@ -17,7 +17,7 @@ export default function robots(): MetadataRoute.Robots {
       // were built - there's nothing already-indexed to accidentally
       // strand. The [...url] catch-all itself is deliberately NOT
       // disallowed: it's an unbounded path pattern (any
-      // instadrop.com/<anything>), not a fixed path, so there's no
+      // reelsavehub.com/<anything>), not a fixed path, so there's no
       // finite rule that excludes it without either being too broad
       // (catching real routes like /contact) or too narrow to matter -
       // its own noindex meta tag is the only mechanism that actually

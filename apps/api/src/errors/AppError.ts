@@ -1,10 +1,10 @@
-import type { InstadropErrorCode } from "@instadrop/types";
+import type { ReelSaveHubErrorCode } from "@reelsavehub/types";
 
 export class AppError extends Error {
   readonly statusCode: number;
-  readonly code: InstadropErrorCode;
+  readonly code: ReelSaveHubErrorCode;
 
-  constructor(code: InstadropErrorCode, message: string, statusCode: number) {
+  constructor(code: ReelSaveHubErrorCode, message: string, statusCode: number) {
     super(message);
     this.name = "AppError";
     this.code = code;

@@ -1,4 +1,4 @@
-# Instadrop
+# ReelSaveHub
 
 A high-performance, privacy-focused, zero-friction web application for parsing, previewing, and downloading **public** Instagram media — photos, reels, videos, carousels, and IGTV. No login, no registration, no paywalls.
 

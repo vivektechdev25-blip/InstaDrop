@@ -87,9 +87,9 @@ Real multi-resolution data does exist elsewhere - the page also advertises `numb
 
 **Not fabricated as fully resolved:** literal playback-with-sound could not be listened to in this sandboxed environment; packet-level `ffprobe` evidence (real, non-empty audio stream synced to the video's duration) is the strongest verification available here.
 
-## Files downloaded from Instadrop failed on WhatsApp share ("Download failed"): fixed, same root cause as above
+## Files downloaded from ReelSaveHub failed on WhatsApp share ("Download failed"): fixed, same root cause as above
 
-**Reported:** a file downloaded from Instadrop failed with a generic WhatsApp error ("Download failed. The download was unable to complete.") when shared to another device.
+**Reported:** a file downloaded from ReelSaveHub failed with a generic WhatsApp error ("Download failed. The download was unable to complete.") when shared to another device.
 
 **Ruled out first, not assumed innocent:**
 - **Proxy/header corruption:** checked `Content-Length` against actual bytes received through `GET /api/v1/download` - matched exactly, every time, both before and after the fix. `downloadService.ts` sets `Content-Type` directly from Instagram's own upstream response header (not hardcoded/guessed), and pipes the stream with no transformation in between. No truncation or mismatch found anywhere in the proxy path.
@@ -171,7 +171,7 @@ Getting the Dockerfile to actually build and run with this took four rounds of l
 | `packages/types/tsconfig.json` extends `../../config/tsconfig.base.json`, which also wasn't in the `deps` stage yet — `tsc` failed with `TS5083: Cannot read file`. | Also `COPY config ./config` into the `deps` stage before `pnpm install` runs. |
 | Runner stage flattened `apps/api/dist` to `/app/dist` and only copied root `/app/node_modules`. But pnpm gives each workspace package its own `node_modules` full of **relative** symlinks into the shared `.pnpm` store (e.g. `apps/api/node_modules/express -> ../../../node_modules/.pnpm/express@.../...`) — flattening broke that relative path, so the container crashed on boot with `Error: Cannot find module 'express'`. | Preserve the real monorepo path depth in the runner stage: copy to `/app/apps/api/dist`, copy `/app/apps/api/node_modules` (the symlinks) *and* `/app/node_modules` (the actual store) both, `WORKDIR /app/apps/api`, run `node dist/app.js` from there. |
 
-**Verified, not just "builds without error":** after the fourth fix, ran the actual container (`docker run`) and sent real HTTP requests through it — Zod validation, `@instadrop/types` workspace resolution, and Playwright/Chromium launching and scraping a real Instagram URL from inside the container all confirmed working end-to-end.
+**Verified, not just "builds without error":** after the fourth fix, ran the actual container (`docker run`) and sent real HTTP requests through it — Zod validation, `@reelsavehub/types` workspace resolution, and Playwright/Chromium launching and scraping a real Instagram URL from inside the container all confirmed working end-to-end.
 
 ## LCP investigation 2026-08-04: resolved as a measurement-methodology issue, not a code defect
 
@@ -277,11 +277,11 @@ Both local dev processes (`apps/web` on port 3000, `apps/api` on port 4000) were
 The machine went to sleep ~15–20 minutes after the servers were last active and stayed suspended for roughly 11 hours before being woken by the power button — exactly matching the gap between the two sets of server logs. Windows Modern Standby routinely suspends or network-disconnects background console-attached processes (these were started as plain background shell jobs, not registered Windows services), so the dev servers not surviving that cycle is expected laptop behavior, not an application defect.
 
 **Explicitly ruled out, not just assumed clean:**
-- **The new `[...url]` catch-all route throwing an unhandled exception:** checked `extractFromCatchAllPath()` and its callers — decoding is wrapped in try/catch, and the garbage-path test (`instadrop.com/some/random/thing`) was re-confirmed live to return a clean `200` with the existing friendly error UI, not a crash. Also, an exception here would only affect `apps/web`, not explain `apps/api` stopping within 90 seconds of it.
+- **The new `[...url]` catch-all route throwing an unhandled exception:** checked `extractFromCatchAllPath()` and its callers — decoding is wrapped in try/catch, and the garbage-path test (`reelsavehub.com/some/random/thing`) was re-confirmed live to return a clean `200` with the existing friendly error UI, not a crash. Also, an exception here would only affect `apps/web`, not explain `apps/api` stopping within 90 seconds of it.
 - **A Playwright resource leak from the Tier 2 scraper:** `browserManager.ts` uses a lazily-created singleton `Browser` (never spawns a duplicate instance per request), and `playwrightTier.ts` closes its per-request `context` unconditionally in a `finally` block, including on every error path. A leak here would also manifest as gradual `apps/api`-only degradation, not a synchronized silent stop of both processes.
 - **Correlation with the rate-limiter or garbage-path stress testing from the Direct URL Mode work:** all of that testing completed with clean, expected output well before the logged sleep event at 00:25:46 — the timeline doesn't overlap.
 
-**Not something to "fix":** this is a local-dev-only artifact of running background processes on a laptop that sleeps, not a defect in Instadrop's code. **Production monitoring note:** the deployed target (Railway, see [DEPLOYMENT.md](./DEPLOYMENT.md)) is a managed container platform, not a laptop subject to OS sleep — this specific mechanism doesn't apply there. Regardless, once deployed, uptime/process-restart monitoring should be in place so that any *real* production crash (unlike this one) surfaces immediately rather than silently, since a production outage is far more costly than a paused local session.
+**Not something to "fix":** this is a local-dev-only artifact of running background processes on a laptop that sleeps, not a defect in ReelSaveHub's code. **Production monitoring note:** the deployed target (Railway, see [DEPLOYMENT.md](./DEPLOYMENT.md)) is a managed container platform, not a laptop subject to OS sleep — this specific mechanism doesn't apply there. Regardless, once deployed, uptime/process-restart monitoring should be in place so that any *real* production crash (unlike this one) surfaces immediately rather than silently, since a production outage is far more costly than a paused local session.
 
 ## Own-private-content authenticated extraction: unverified (2026-08-05)
 

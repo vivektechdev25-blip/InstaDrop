@@ -40,7 +40,7 @@ const FEATURES: Feature[] = [
   {
     icon: Smartphone,
     title: "Installable app",
-    description: "Add Instadrop to your home screen and it works like a native app, on any device.",
+    description: "Add ReelSaveHub to your home screen and it works like a native app, on any device.",
   },
   {
     icon: Layers,
@@ -55,7 +55,7 @@ const FEATURES: Feature[] = [
   {
     icon: Link,
     title: "Address-bar shortcut",
-    description: "Already have the Instagram link copied? Type instadrop.com/ right before it in your browser's address bar and hit enter — you'll land straight on the preview, no extra visit needed.",
+    description: "Already have the Instagram link copied? Type reelsavehub.com/ right before it in your browser's address bar and hit enter — you'll land straight on the preview, no extra visit needed.",
     visual: <AddressBarExample />,
     wide: true,
   },

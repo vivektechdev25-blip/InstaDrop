@@ -30,12 +30,12 @@ Instagram CDN (external — scraped via proxy, media never stored on our servers
 
 ## Key architectural rule
 
-Instadrop never stores Instagram media on its own servers. All media is proxy-streamed directly to the user's browser.
+ReelSaveHub never stores Instagram media on its own servers. All media is proxy-streamed directly to the user's browser.
 
 ## Folder structure
 
 ```
-instadrop-monorepo/
+reelsavehub-monorepo/
 |-- apps/
 |   |-- web/     Next.js frontend (App Router)
 |   `-- api/     Express backend microservice (Dockerized)
@@ -73,7 +73,7 @@ siteConfig.ts
 
 **Two deliberate exceptions, both documented in-code:**
 1. **The hero `<h1>`** (`DownloaderPage.tsx`) duplicates `siteConfig.tagline`'s wording as hand-written JSX, because it highlights "original quality" in its own gradient `<span>` — a single plain string can't express that. The comment there flags that the two must be updated together.
-2. **Legal-page prose and FAQ copy** keep `Instadrop` as literal text (~30 mentions across `terms`, `privacy-policy`, `faqData.ts`). Interpolating a config value into every sentence of a legal document makes the source materially harder to read for little real benefit — a genuine rebrand needs a human/legal re-read of that prose regardless. Only the *structural* label-level text (page `metadata.description`, headings, wordmarks) is centralized.
+2. **Legal-page prose and FAQ copy** keep `ReelSaveHub` as literal text (~30 mentions across `terms`, `privacy-policy`, `faqData.ts`). Interpolating a config value into every sentence of a legal document makes the source materially harder to read for little real benefit — a genuine rebrand needs a human/legal re-read of that prose regardless. Only the *structural* label-level text (page `metadata.description`, headings, wordmarks) is centralized.
 
 **Manifest note:** `public/manifest.json` (static, fully duplicated name/description) was replaced by `app/manifest.ts` so it could import `siteConfig`. Next.js serves that file convention at **`/manifest.webmanifest`**, not `/manifest.json` — so `layout.tsx`'s `metadata.manifest` and `public/sw.js`'s `APP_SHELL_URLS` both needed updating. The service-worker one was load-bearing: `cache.addAll()` rejects its entire install step if any single precached URL 404s, so a missed reference there would have silently broken offline support. Its `CACHE_NAME` was bumped to `v2` so already-installed workers re-precache rather than retaining the stale list.
 
@@ -145,8 +145,8 @@ components/pwa/
 Two doorways that skip the homepage's manual paste-and-click, both funneling into the exact same downloader flow — neither gets its own validation, fetch, or preview logic:
 
 ```
-https://instadrop.com/?url=<instagram-url>              (query param - for shared links)
-https://instadrop.com/<instagram-url>                    (catch-all - address-bar shortcut)
+https://reelsavehub.com/?url=<instagram-url>              (query param - for shared links)
+https://reelsavehub.com/<instagram-url>                    (catch-all - address-bar shortcut)
       |                                    |
       v                                    v
 extractFromQueryParam()          extractFromCatchAllPath()      lib/urlParser.ts
@@ -167,7 +167,7 @@ extractFromQueryParam()          extractFromCatchAllPath()      lib/urlParser.ts
                                                           a silent background fetch
 ```
 
-**Why validation isn't duplicated:** `useInstagramDownloader().submit()` already calls `cleanInstagramUrl()` + `isValidInstagramUrl()` (`lib/validators.ts`) before ever fetching, and already dispatches a friendly `ERROR` state for anything that fails. `urlParser.ts` therefore does zero validation of its own — it only extracts a raw candidate string, decoded defensively so it can't throw. This means garbage input (`instadrop.com/some/random/thing`) is handled for free by the existing error path: no new error UI, no unhandled exception, confirmed live.
+**Why validation isn't duplicated:** `useInstagramDownloader().submit()` already calls `cleanInstagramUrl()` + `isValidInstagramUrl()` (`lib/validators.ts`) before ever fetching, and already dispatches a friendly `ERROR` state for anything that fails. `urlParser.ts` therefore does zero validation of its own — it only extracts a raw candidate string, decoded defensively so it can't throw. This means garbage input (`reelsavehub.com/some/random/thing`) is handled for free by the existing error path: no new error UI, no unhandled exception, confirmed live.
 
 **A real bug found and fixed while building this:** the naive assumption was that a path like `/https://www.instagram.com/reel/X` splits into catch-all segments preserving the double slash as an empty-string artifact (`["https:", "", "www.instagram.com", ...]`), which a plain `join("/")` would reconstruct correctly. Confirmed live via `curl -I` that this is wrong — Next.js issues a 308 redirect that **collapses consecutive slashes before the catch-all route ever sees them**, so the real segments are `["https:", "www.instagram.com", "reel", "X"]` with the "//" already gone. `extractFromCatchAllPath()` detects a scheme-shaped first segment (`/^https?:$/`) and re-inserts `"//"` explicitly rather than relying on an empty segment that doesn't survive.
 

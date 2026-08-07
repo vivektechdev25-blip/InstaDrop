@@ -1,4 +1,4 @@
-import type { MediaItem } from "@instadrop/types";
+import type { MediaItem } from "@reelsavehub/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -10,7 +10,7 @@ export function buildDownloadFilename(
 ): string {
   const extension = media.type === "video" ? "mp4" : "jpg";
   const suffix = slideCount > 1 ? `_${slideIndex + 1}` : "";
-  return `instadrop_${shortcode}${suffix}.${extension}`;
+  return `reelsavehub_${shortcode}${suffix}.${extension}`;
 }
 
 export function buildDownloadUrl(media: MediaItem, filename: string): string {

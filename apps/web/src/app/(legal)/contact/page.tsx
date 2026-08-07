@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 // Placeholder inbox - flagged here rather than silently treated as final:
 // confirm this is a real, monitored address before launch.
-const CONTACT_EMAIL = "support@instadrop.app";
+const CONTACT_EMAIL = "support@reelsavehub.com";
 
 const SECTIONS = [
   { id: "how-to-reach-us", label: "How to Reach Us" },
@@ -47,7 +47,7 @@ export default function ContactPage() {
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">Something&apos;s broken — a link that won&apos;t resolve, a download that fails, a bug in the app.</li>
             <li className="list-disc">A copyright or content-removal concern — see the dedicated section below.</li>
-            <li className="list-disc">General questions about how Instadrop works, or a feature you&apos;d like to see.</li>
+            <li className="list-disc">General questions about how ReelSaveHub works, or a feature you&apos;d like to see.</li>
           </ul>
           <p>
             We don&apos;t currently offer live chat or a ticketing system — email is
@@ -57,9 +57,9 @@ export default function ContactPage() {
 
         <LegalSection id="copyright-concerns" title="Copyright Concerns">
           <p>
-            If you believe content accessible through Instadrop infringes your copyright,
+            If you believe content accessible through ReelSaveHub infringes your copyright,
             email us with a description of the content and a link to the original
-            Instagram post. Since Instadrop never stores media on its own servers,
+            Instagram post. Since ReelSaveHub never stores media on its own servers,
             removing the content from Instagram itself is the most direct way to stop it
             from being accessible here — but we&apos;re glad to help point you in the
             right direction if you&apos;re not sure how.
