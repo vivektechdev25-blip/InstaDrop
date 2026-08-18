@@ -36,9 +36,9 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Keyboard nav + ARIA pass — confirmed via a real Lighthouse audit (100 accessibility) plus a manual Playwright-driven keyboard `Tab`-order check: logical order (logo → nav → theme toggle → URL input → paste button → footer), disabled submit button correctly excluded from tab order until the field has a value.
 
 ## Day 5 — QA, testing & deployment
-- [ ] Deploy `apps/web` to Vercel, `apps/api` to Railway
+- [ ] Deploy `apps/web` to Vercel, `apps/api` to Render
 - [ ] Custom domain + SSL
 - [ ] End-to-end smoke test of the full [Pre-production readiness checklist](./DEPLOYMENT.md#pre-production-readiness-checklist)
 
 ## Future scaling (not MVP)
-- [ ] If `apps/api` moves to multiple Railway instances, replace `express-rate-limit` (in-memory) with a distributed rate limiter (e.g. Upstash Redis, sliding window) — in-memory counters don't sync across instances and the effective limit multiplies with instance count. See [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [SECURITY.md](./SECURITY.md#rate-limiting).
+- [ ] If `apps/api` moves to multiple Render instances, replace `express-rate-limit` (in-memory) with a distributed rate limiter (e.g. Upstash Redis, sliding window) — in-memory counters don't sync across instances and the effective limit multiplies with instance count. See [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [SECURITY.md](./SECURITY.md#rate-limiting).

@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Deployment readiness for container hosting (2026-08-18).** Audited the API specifically for failure modes that only appear inside a container, and fixed five. Backend host switched from Railway to **Render** in the docs — nothing in the code was Railway-specific, both are Docker-based and the same `apps/api/Dockerfile` deploys unchanged to either.
+  - **Chromium launch flags** (`browserManager.ts`): added `--disable-dev-shm-usage` and `--no-sandbox`. Container runtimes mount `/dev/shm` at 64MB, which Chromium exhausts partway through a real image-heavy Instagram page, and the Playwright image runs as root, under which Chromium's setuid sandbox refuses to start. Neither reproduces in local dev — this would have been a production-only crash. Verified a real reel still scrapes end-to-end with the flags applied.
+  - **`GET /health`**: no route previously answered a bare GET, leaving nothing for a platform health check to poll and no safe URL to confirm a deploy by. Deliberately dependency-free, so it answers instantly even while a scrape occupies the worker.
+  - **Explicit `0.0.0.0` bind**: a process bound only to loopback is unreachable from outside its container — failing health checks while the logs look healthy.
+  - **`CORS_ORIGIN` now accepts a comma-separated list**: a deployed frontend legitimately has several origins (`*.vercel.app` plus a custom domain), and single-value parsing forced a redeploy to switch between them. Still fails safe — an unset value allows only localhost, never a wildcard. Verified live that each listed origin is echoed back and an unlisted one is rejected.
+  - **`render.yaml` blueprint** added at the repo root, declaring the API as a Docker service with the correct Dockerfile path, root build context, health check path and instance type. This removes the runtime choice from the deploy flow: configuring by hand defaults to Render's Node runtime, which builds the whole monorepo and then fails at `pnpm run start` (no root `start` script) — and, more seriously, has no Chromium at all, so Tier 2 could never run there.
+
 ### Changed
 - **Rebrand: "Instadrop" → "ReelSaveHub" (2026-08-07), domain `instadrop.app` → `reelsavehub.com`.** The earlier `siteConfig.ts` centralization paid off exactly as intended - one config change propagated the name to page titles, meta descriptions, OG/Twitter tags, `manifest.webmanifest`, `WebApplication` JSON-LD, the Navbar/Footer wordmarks, the OG image, all three legal pages' `metadata.description`, and `FeatureList`'s "Why …" heading. Verified with the project's established sentinel test (temporarily set `name` to a throwaway value, confirmed it appeared in all 9 checked consumer surfaces via a real production build, then restored).
 

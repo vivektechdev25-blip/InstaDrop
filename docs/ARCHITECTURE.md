@@ -13,7 +13,7 @@ Frontend — Vercel Edge (Next.js 14, TypeScript, Tailwind + shadcn/ui)
   `-- State Management        (IDLE -> VALIDATING -> FETCHING -> SUCCESS/ERROR/RATE_LIMITED)
       |
       v
-Backend API — Railway (Node.js 20 + Express, Docker)
+Backend API — Render (Node.js 20 + Express, Docker)
   |-- Scraper Engine          (multi-tier fallback scrapers)
   |-- Rate Limiter            (express-rate-limit, in-memory, single instance)
   |-- Security Layer          (Helmet, Zod validation, CORS)
@@ -88,14 +88,14 @@ siteConfig.ts
 - Node.js 20 LTS + Express.js (TypeScript)
 - `express-rate-limit` (in-memory) for rate limiting
 - Supabase PostgreSQL for audit/anonymous request logs only
-- Hosting: Vercel (frontend) + Railway (backend API, Dockerized)
+- Hosting: Vercel (frontend) + Render (backend API, Dockerized)
 - PNPM monorepo workspace
 
 ### Rate limiting: in-memory for MVP
 
-`express-rate-limit` runs in-memory, per Railway instance, enforcing 10 requests / 10 minutes / IP. This is intentional for the MVP: the backend deploys as a single Railway instance, so there is no cross-instance state to synchronize, and it avoids the cost/operational overhead of a Redis dependency (previously Upstash) before it's needed.
+`express-rate-limit` runs in-memory, per Render instance, enforcing 10 requests / 10 minutes / IP. This is intentional for the MVP: the backend deploys as a single Render instance, so there is no cross-instance state to synchronize, and it avoids the cost/operational overhead of a Redis dependency (previously Upstash) before it's needed.
 
-**Revisit at scale:** if `apps/api` ever scales to multiple Railway instances, in-memory counters no longer share state across instances and the limit becomes effectively `N × 10 req / 10 min / IP`. At that point, switch back to a distributed store (e.g. Upstash Redis with a sliding-window algorithm) so the limit holds across instances. Tracked in [TODO.md](./TODO.md).
+**Revisit at scale:** if `apps/api` ever scales to multiple Render instances, in-memory counters no longer share state across instances and the limit becomes effectively `N × 10 req / 10 min / IP`. At that point, switch back to a distributed store (e.g. Upstash Redis with a sliding-window algorithm) so the limit holds across instances. Tracked in [TODO.md](./TODO.md).
 
 ### Scraper tiers: instagram-url-direct (fast), Playwright (fallback)
 

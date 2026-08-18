@@ -8,7 +8,7 @@
 | 2 | Backend parsing API | Express server, Instagram scraper service, proxy bypass pipeline, `/api/v1/fetch` and `/api/v1/download` |
 | 3 | Client integration & security | React Query hooks, loading skeletons, express-rate-limit, Helmet middleware, error toasts |
 | 4 | SEO, PWA & performance | JSON-LD schema, OG/Twitter cards, PWA service worker + install prompt system, Lighthouse audit (>95) |
-| 5 | QA, testing & deployment | Vercel + Railway deploy, custom DNS/SSL, end-to-end smoke testing |
+| 5 | QA, testing & deployment | Vercel + Render deploy, custom DNS/SSL, end-to-end smoke testing |
 
 ## Post-MVP roadmap
 

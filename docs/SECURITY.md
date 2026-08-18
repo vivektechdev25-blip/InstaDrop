@@ -10,9 +10,9 @@
 
 ## Rate limiting
 
-Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-memory (`apps/api/src/middlewares/rateLimiter.ts`). This is sufficient for the MVP's single-instance Railway deployment.
+Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-memory (`apps/api/src/middlewares/rateLimiter.ts`). This is sufficient for the MVP's single-instance Render deployment.
 
-**Note:** in-memory rate limiting only holds its limit correctly on a single instance. If the API scales horizontally (multiple Railway instances), each instance tracks its own counters, so the effective limit multiplies with instance count. Revisit with a distributed store (e.g. Redis-backed sliding window) before scaling out — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [TODO.md](./TODO.md).
+**Note:** in-memory rate limiting only holds its limit correctly on a single instance. If the API scales horizontally (multiple Render instances), each instance tracks its own counters, so the effective limit multiplies with instance count. Revisit with a distributed store (e.g. Redis-backed sliding window) before scaling out — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [TODO.md](./TODO.md).
 
 ## Direct URL mode: auto-fetch throttling
 
