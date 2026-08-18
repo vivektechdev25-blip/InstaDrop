@@ -1,0 +1,61 @@
+# Render Blueprint - deploys apps/api as a Docker web service.
+#
+# Why this file exists: selecting the service settings by hand in Render's
+# dashboard defaults to the Node runtime, which builds the whole monorepo
+# (including apps/web) and then fails at `pnpm run start`, because the repo
+# root has no `start` script. More importantly, the Node runtime has no
+# Chromium and no root access to install its system libraries, so Playwright
+# - the entire Tier 2 scraper - cannot run there at all. Declaring the
+# service here removes that choice from the deploy flow.
+#
+# To use: Render Dashboard -> New -> Blueprint -> pick this repo. Render
+# reads this file and creates the service pre-configured.
+#
+# Note that apps/web is deliberately NOT declared here - the frontend
+# deploys to Vercel, see docs/DEPLOYMENT.md.
+
+services:
+  - type: web
+    name: reelsavehub-api
+    runtime: docker
+
+    # Path to the Dockerfile, and the directory Docker builds from. The
+    # context MUST be the repo root ("."), not apps/api: the Dockerfile
+    # copies packages/types and config/ from the root during its deps
+    # stage, and a narrower context fails with "path does not exist:
+    # tsconfig.json" - a bug already hit and fixed locally, see
+    # docs/KNOWN_ISSUES.md.
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+
+    # Chromium is memory-hungry: it is a full browser, launched per request
+    # context, on top of Node. The free instance type's 512MB is enough to
+    # boot the API but tends to get the browser OOM-killed mid-scrape, and
+    # free instances also sleep after ~15 minutes idle, which turns the next
+    # request into a ~1 minute cold start. Change to `free` if you only want
+    # to prove the build works before committing to a paid instance.
+    plan: starter
+
+    # Closest Render region to IST. Valid alternatives: oregon, ohio,
+    # virginia, frankfurt.
+    region: singapore
+
+    # Matches the dependency-free endpoint in apps/api/src/app.ts. Render
+    # polls this to decide whether a deploy succeeded, so it must not touch
+    # the browser or the network - otherwise a slow scrape could fail the
+    # health check and trigger a restart loop.
+    healthCheckPath: /health
+
+    envVars:
+      # sync: false means "do not put a value in git - prompt for it in the
+      # dashboard". This is the frontend origin(s) allowed to call the API,
+      # and it cannot be known until Vercel has assigned a URL, so it is set
+      # after the frontend deploys. Comma-separate multiple origins, e.g.
+      # https://reelsavehub.vercel.app,https://reelsavehub.com
+      - key: CORS_ORIGIN
+        sync: false
+
+    # PORT is injected by Render automatically and read by app.ts - it is
+    # deliberately not declared here. SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+    # are also omitted: requestLogRepository.ts is not wired into the running
+    # app yet, so the API deploys and functions fully without them.
