@@ -7,6 +7,17 @@ import { closeBrowser } from "./services/scrapers/browserManager";
 
 const app = express();
 
+// Render (like every container-hosting platform) sits the app behind its
+// own reverse proxy, which sets X-Forwarded-For to the real client IP.
+// Without telling Express to trust it, express-rate-limit can't safely
+// resolve req.ip for per-IP limiting and throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request - confirmed live in
+// Render's logs, not assumed. `1` trusts exactly one hop (the platform's
+// own proxy) rather than the whole forwarded chain, which matters: a
+// client could otherwise set its own X-Forwarded-For and spoof the IP the
+// rate limiter keys on.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 // Defaults to localhost, not a wildcard - an unset CORS_ORIGIN in
 // production fails safe (blocks the real frontend, loudly and
