@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -5,6 +6,16 @@ import { apiRouter } from "./routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { closeBrowser } from "./services/scrapers/browserManager";
 
+// Genuine local-dev bug found 2026-08-18: `dotenv` was a dependency and
+// apps/api/.env existed with real-looking values, but nothing ever called
+// dotenv.config() - so .env was silently never read. This went unnoticed
+// because every value in .env happened to match the code's own hardcoded
+// fallback (PORT ?? 4000, CORS_ORIGIN ?? "http://localhost:3000"), so the
+// app "worked" by coincidence, not because .env was doing anything. Only
+// surfaced once a value in .env needed to differ from the fallback (adding
+// a second local frontend port to CORS_ORIGIN) and silently had no effect.
+// Render deployment was unaffected - it sets env vars directly via its
+// dashboard, not through this file - so this was local-dev-only.
 const app = express();
 
 // Render (like every container-hosting platform) sits the app behind its
