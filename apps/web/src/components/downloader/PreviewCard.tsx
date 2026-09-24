@@ -6,7 +6,7 @@ import type { InstagramPost } from "@reelsavehub/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { MediaViewer } from "@/components/downloader/MediaViewer";
-import { buildDownloadFilename, buildDownloadUrl } from "@/lib/downloadUrl";
+import { buildDownloadFilename } from "@/lib/downloadUrl";
 
 export interface PreviewCardProps {
   post: InstagramPost;
@@ -20,10 +20,31 @@ export function PreviewCard({ post }: PreviewCardProps) {
   if (!currentMedia) return null;
 
   const filename = buildDownloadFilename(post.shortcode, currentMedia, slideIndex, slideCount);
-  const downloadUrl = buildDownloadUrl(currentMedia, filename);
 
-  function goToSlide(nextIndex: number) {
-    setSlideIndex(((nextIndex % slideCount) + slideCount) % slideCount);
+  const goToSlide = (nextIndex: number) => setSlideIndex(((nextIndex % slideCount) + slideCount) % slideCount);
+
+  async function handleDownload() {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
+      const response = await fetch(
+        `${baseUrl}/download?url=${encodeURIComponent(currentMedia.url)}&filename=${encodeURIComponent(filename)}`
+      );
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"}/download?url=${encodeURIComponent(currentMedia.url)}&filename=${encodeURIComponent(filename)}`,
+        "_blank"
+      );
+    }
   }
 
   return (
@@ -83,12 +104,10 @@ export function PreviewCard({ post }: PreviewCardProps) {
           </p>
         ) : null}
 
-        <Button asChild className="w-full">
-          <a href={downloadUrl}>
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Download {currentMedia.type === "video" ? "video" : "photo"}
-            {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
-          </a>
+        <Button type="button" onClick={handleDownload} className="w-full">
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Download {currentMedia.type === "video" ? "video" : "photo"}
+          {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
         </Button>
       </CardContent>
     </Card>
