@@ -49,7 +49,8 @@ export const playwrightTier: IMediaScraper = {
     const browser = await getBrowser();
     const context = await browser.newContext({
       userAgent: USER_AGENT,
-      viewport: { width: 1280, height: 900 },
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
     });
     const page = await context.newPage();
 
