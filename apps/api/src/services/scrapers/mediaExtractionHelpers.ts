@@ -78,34 +78,45 @@ export async function readPageMeta(page: Page): Promise<PageMeta> {
 export async function findProgressiveVideoUrl(page: Page): Promise<string | null> {
   return page.evaluate<string | null>(`
     (() => {
-      const scripts = Array.from(
-        document.querySelectorAll('script[type="application/json"][data-sjs]')
-      );
-
-      function deepFindVideoVersions(node, depth) {
-        if (depth > 14 || node === null || typeof node !== "object") return null;
+      function deepFind(node, depth) {
+        if (depth > 20 || node === null || typeof node !== "object") return null;
         if (Array.isArray(node.video_versions) && node.video_versions.length > 0) {
           return node.video_versions;
         }
+        if (typeof node.video_url === "string" && node.video_url) {
+          return [{ url: node.video_url }];
+        }
         for (const key of Object.keys(node)) {
-          const found = deepFindVideoVersions(node[key], depth + 1);
+          const found = deepFind(node[key], depth + 1);
           if (found) return found;
         }
         return null;
       }
 
-      for (const script of scripts) {
+      const dataScripts = Array.from(
+        document.querySelectorAll('script[type="application/json"][data-sjs]')
+      );
+      for (const script of dataScripts) {
         try {
           const parsed = JSON.parse(script.textContent || "");
-          const versions = deepFindVideoVersions(parsed, 0);
+          const versions = deepFind(parsed, 0);
           if (versions && versions[0] && typeof versions[0].url === "string") {
             return versions[0].url;
           }
-        } catch {
-          // Not every data-sjs script tag is well-formed JSON we care
-          // about - skip and keep searching the rest.
-        }
+        } catch { /* skip */ }
       }
+
+      const allScripts = Array.from(document.querySelectorAll("script:not([src])"));
+      for (const script of allScripts) {
+        try {
+          const match = (script.textContent || "").match(/"video_url"\s*:\s*"(https?:\/\/[^"]+\.mp4[^"]*)"/);
+          if (match) return match[1].replace(/\\u0026/g, "&");
+        } catch { /* skip */ }
+      }
+
+      const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute("content");
+      if (ogVideo && ogVideo.includes(".mp4")) return ogVideo;
+
       return null;
     })()
   `);
