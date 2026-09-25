@@ -76,7 +76,7 @@ export async function readPageMeta(page: Page): Promise<PageMeta> {
  * step - e.g. image/carousel posts never have this data at all.
  */
 export async function findProgressiveVideoUrl(page: Page): Promise<string | null> {
-  return page.evaluate<string | null>(`
+  const result = await page.evaluate<string | null>(`
     (() => {
       function deepFind(node, depth) {
         if (depth > 20 || node === null || typeof node !== "object") return null;
@@ -101,11 +101,18 @@ export async function findProgressiveVideoUrl(page: Page): Promise<string | null
           const parsed = JSON.parse(script.textContent || "");
           const versions = deepFind(parsed, 0);
           if (versions && versions.length > 0) {
-            // Instagram video_versions: first entry is usually DASH (no audio),
-            // last entry is progressive (h264+aac). Prefer progressive.
-            const candidate = versions.find((v) => v.type === 102 || v.type === "102")
-              ?? versions[versions.length - 1];
-            if (typeof candidate.url === "string") return candidate.url;
+            const types = versions.map((v) => v.type).join(",");
+            console.log("[findProgressiveVideoUrl] video_versions types=" + types + " count=" + versions.length);
+            // Instagram video_versions: lower-numbered types are DASH manifests
+            // (no audio). The highest-numbered type is the progressive mp4
+            // (h264+aac). Pick the highest type, not the first/last entry.
+            let best = versions[0];
+            for (const v of versions) {
+              if (typeof v.url === "string" && (typeof best.type !== "number" || (typeof v.type === "number" && v.type > best.type))) {
+                best = v;
+              }
+            }
+            if (typeof best.url === "string") return best.url;
           }
         } catch { /* skip */ }
       }
@@ -124,6 +131,12 @@ export async function findProgressiveVideoUrl(page: Page): Promise<string | null
       return null;
     })()
   `);
+  if (result) {
+    console.log("[findProgressiveVideoUrl] picked URL:", result.slice(0, 120));
+  } else {
+    console.log("[findProgressiveVideoUrl] no progressive URL found");
+  }
+  return result;
 }
 
 export function stripByteRangeParams(videoUrl: string): string {
