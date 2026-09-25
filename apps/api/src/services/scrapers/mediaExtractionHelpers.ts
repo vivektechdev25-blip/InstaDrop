@@ -100,8 +100,12 @@ export async function findProgressiveVideoUrl(page: Page): Promise<string | null
         try {
           const parsed = JSON.parse(script.textContent || "");
           const versions = deepFind(parsed, 0);
-          if (versions && versions[0] && typeof versions[0].url === "string") {
-            return versions[0].url;
+          if (versions && versions.length > 0) {
+            // Instagram video_versions: first entry is usually DASH (no audio),
+            // last entry is progressive (h264+aac). Prefer progressive.
+            const candidate = versions.find((v) => v.type === 102 || v.type === "102")
+              ?? versions[versions.length - 1];
+            if (typeof candidate.url === "string") return candidate.url;
           }
         } catch { /* skip */ }
       }
