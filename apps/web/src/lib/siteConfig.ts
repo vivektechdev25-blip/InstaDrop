@@ -1,6 +1,6 @@
 export const siteConfig = {
-  name: "ReelSaveHub",
-  title: "ReelSaveHub — Instagram Photo & Video Downloader",
+  name: "ReelSaveNow",
+  title: "ReelSaveNow — Instagram Photo & Video Downloader",
   description:
     "Download public Instagram photos, reels, videos, and carousel posts in original quality. No login required.",
   // Plain-text version of the hero headline - used anywhere that can't
@@ -10,5 +10,5 @@ export const siteConfig = {
   // than sourced from this string - if this tagline ever changes, that
   // heading needs a manual matching update.
   tagline: "Download Instagram photos, reels & videos in original quality",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://reelsavehub.com",
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://reelsavenow.com",
 } as const;

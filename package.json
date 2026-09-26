@@ -1,5 +1,5 @@
 {
-  "name": "reelsavehub-monorepo",
+  "name": "reelsavenow-monorepo",
   "private": true,
   "version": "0.1.0",
   "engines": {
@@ -7,8 +7,8 @@
   },
   "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "dev:web": "pnpm --filter @reelsavehub/web dev",
-    "dev:api": "pnpm --filter @reelsavehub/api dev",
+    "dev:web": "pnpm --filter @reelsavenow/web dev",
+    "dev:api": "pnpm --filter @reelsavenow/api dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"

@@ -71,7 +71,7 @@ const port = Number(process.env.PORT ?? 4000);
 // to loopback is unreachable from outside it - the failure mode being a
 // health check that never passes while the logs look perfectly healthy.
 const server = app.listen(port, "0.0.0.0", () => {
-  console.log(`ReelSaveHub API listening on port ${port}`);
+  console.log(`ReelSaveNow API listening on port ${port}`);
 });
 
 async function shutdown(): Promise<void> {

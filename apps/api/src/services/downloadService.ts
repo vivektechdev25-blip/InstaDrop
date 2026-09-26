@@ -4,7 +4,7 @@ import { AppError } from "../errors/AppError";
 
 function sanitizeFilename(filename: string): string {
   const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 255);
-  return sanitized || "reelsavehub-media";
+  return sanitized || "reelsavenow-media";
 }
 
 async function streamToResponse(

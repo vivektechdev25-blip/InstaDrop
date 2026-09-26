@@ -1,10 +1,10 @@
-import type { ReelSaveHubErrorCode } from "@reelsavehub/types";
+import type { ReelSaveNowErrorCode } from "@reelsavenow/types";
 
 export class AppError extends Error {
   readonly statusCode: number;
-  readonly code: ReelSaveHubErrorCode;
+  readonly code: ReelSaveNowErrorCode;
 
-  constructor(code: ReelSaveHubErrorCode, message: string, statusCode: number) {
+  constructor(code: ReelSaveNowErrorCode, message: string, statusCode: number) {
     super(message);
     this.name = "AppError";
     this.code = code;

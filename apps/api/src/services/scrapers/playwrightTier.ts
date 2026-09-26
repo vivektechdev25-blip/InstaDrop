@@ -1,4 +1,4 @@
-import type { InstagramPost, MediaItem } from "@reelsavehub/types";
+import type { InstagramPost, MediaItem } from "@reelsavenow/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
 import { getBrowser } from "./browserManager";
@@ -49,8 +49,7 @@ export const playwrightTier: IMediaScraper = {
     const browser = await getBrowser();
     const context = await browser.newContext({
       userAgent: USER_AGENT,
-      viewport: { width: 390, height: 844 },
-      isMobile: true,
+      viewport: { width: 1280, height: 900 },
     });
     const page = await context.newPage();
 

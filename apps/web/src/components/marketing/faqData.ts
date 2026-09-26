@@ -12,7 +12,7 @@ export interface FaqEntry {
 // so page.tsx's server-side .map() over it failed at build time.
 export const FAQ_ENTRIES: FaqEntry[] = [
   {
-    question: "Is ReelSaveHub free?",
+    question: "Is ReelSaveNow free?",
     answer: "Yes, completely. No hidden tiers, no paywalls.",
   },
   {
@@ -26,11 +26,11 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   {
     question: "Can I download private content?",
     answer:
-      "Not currently. ReelSaveHub only works with public posts; private-account support isn't available yet.",
+      "Not currently. ReelSaveNow only works with public posts; private-account support isn't available yet.",
   },
   {
     question: "Is the video or photo quality reduced?",
-    answer: "No — ReelSaveHub fetches the original file Instagram serves, not a re-compressed copy.",
+    answer: "No — ReelSaveNow fetches the original file Instagram serves, not a re-compressed copy.",
   },
   {
     question: "Does this work on mobile?",
@@ -38,8 +38,8 @@ export const FAQ_ENTRIES: FaqEntry[] = [
       "Yes. The site is fully responsive, and it can be installed as an app for quicker access.",
   },
   {
-    question: "Is there a faster way to use ReelSaveHub?",
+    question: "Is there a faster way to use ReelSaveNow?",
     answer:
-      "Yes. If you already have an Instagram link copied, you can skip the homepage entirely — just type reelsavehub.com/ directly before the link in your browser's address bar and press enter. You'll land straight on the preview and download screen.",
+      "Yes. If you already have an Instagram link copied, you can skip the homepage entirely — just type reelsavenow.com/ directly before the link in your browser's address bar and press enter. You'll land straight on the preview and download screen.",
   },
 ];

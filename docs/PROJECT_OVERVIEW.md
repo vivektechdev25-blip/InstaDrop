@@ -2,7 +2,7 @@
 
 ## What it is
 
-ReelSaveHub is a high-performance, privacy-focused, zero-friction web application that parses, extracts, previews, and downloads **public** Instagram media — Photos, Reels, Videos, Carousel posts, and IGTV.
+ReelSaveNow is a high-performance, privacy-focused, zero-friction web application that parses, extracts, previews, and downloads **public** Instagram media — Photos, Reels, Videos, Carousel posts, and IGTV.
 
 ## Core objectives
 
@@ -13,7 +13,7 @@ ReelSaveHub is a high-performance, privacy-focused, zero-friction web applicatio
 
 ## Target users
 
-| Segment | Need | ReelSaveHub solution |
+| Segment | Need | ReelSaveNow solution |
 |---|---|---|
 | Content creators & marketers | Archive owned media | Original-resolution HD downloads, no re-compression |
 | Social media managers | Batch capture campaign assets | Carousel multi-slide parser with per-slide downloads |
@@ -21,6 +21,6 @@ ReelSaveHub is a high-performance, privacy-focused, zero-friction web applicatio
 
 ## Key architectural rule
 
-ReelSaveHub never stores Instagram media on its own servers. All media is proxy-streamed directly to the user's browser.
+ReelSaveNow never stores Instagram media on its own servers. All media is proxy-streamed directly to the user's browser.
 
 See [FEATURES.md](./FEATURES.md) for MVP scope and [ROADMAP.md](./ROADMAP.md) for what comes after.

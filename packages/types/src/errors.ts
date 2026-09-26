@@ -1,4 +1,4 @@
-export type ReelSaveHubErrorCode =
+export type ReelSaveNowErrorCode =
   | "INVALID_URL"
   | "PRIVATE_ACCOUNT"
   | "RATE_LIMITED"

@@ -16,7 +16,7 @@
 
 services:
   - type: web
-    name: reelsavehub-api
+    name: reelsavenow-api
     runtime: docker
 
     # Path to the Dockerfile, and the directory Docker builds from. The
@@ -51,7 +51,7 @@ services:
       # dashboard". This is the frontend origin(s) allowed to call the API,
       # and it cannot be known until Vercel has assigned a URL, so it is set
       # after the frontend deploys. Comma-separate multiple origins, e.g.
-      # https://reelsavehub.vercel.app,https://reelsavehub.com
+      # https://reelsavenow.vercel.app,https://reelsavenow.com
       - key: CORS_ORIGIN
         sync: false
 

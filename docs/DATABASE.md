@@ -1,6 +1,6 @@
 # Database
 
-ReelSaveHub stores **no Instagram media or credentials**. The only persisted data is anonymous audit/request logging in Supabase PostgreSQL.
+ReelSaveNow stores **no Instagram media or credentials**. The only persisted data is anonymous audit/request logging in Supabase PostgreSQL.
 
 ## `request_logs`
 

@@ -29,7 +29,7 @@ Every env var the code actually reads, audited live against both `.env.example` 
 | Var | Required to deploy? | Notes |
 |---|---|---|
 | `PORT` | No | Render sets this automatically; the app reads it and falls back to `4000`. The server binds explicitly to `0.0.0.0` — a process bound only to loopback is unreachable from outside the container, and the failure mode is a health check that never passes while the logs look healthy. |
-| `CORS_ORIGIN` | **Yes, for production** | `app.ts` defaults to `http://localhost:3000` if unset — safe for nothing-leaks-open, but it means the real deployed frontend won't be able to call the API until this is set to its actual production URL. See [SECURITY.md](./SECURITY.md#cors) — this was found to be a real bug (documented but silently unused) and fixed while preparing this checklist. **Accepts a comma-separated list**, since one frontend legitimately has several origins (`*.vercel.app` plus a custom domain): `https://reelsavehub.vercel.app,https://reelsavehub.com`. Confirmed live that each listed origin is echoed back and an unlisted one is rejected. |
+| `CORS_ORIGIN` | **Yes, for production** | `app.ts` defaults to `http://localhost:3000` if unset — safe for nothing-leaks-open, but it means the real deployed frontend won't be able to call the API until this is set to its actual production URL. See [SECURITY.md](./SECURITY.md#cors) — this was found to be a real bug (documented but silently unused) and fixed while preparing this checklist. **Accepts a comma-separated list**, since one frontend legitimately has several origins (`*.vercel.app` plus a custom domain): `https://reelsavenow.vercel.app,https://reelsavenow.com`. Confirmed live that each listed origin is echoed back and an unlisted one is rejected. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No, not yet** | `requestLogRepository.ts` (the only file that reads these) is not imported anywhere in the running app yet — request logging is scaffolded but not wired into the live request path. The API deploys and functions fully without these set. Needed once request logging actually ships. |
 
 **`apps/web`** (reads `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`):
@@ -75,8 +75,8 @@ Never commit real `.env` files — they are gitignored.
 ## Building the API image locally
 
 ```bash
-docker build -f apps/api/Dockerfile -t reelsavehub-api:test .
-docker run --rm -p 4000:4000 reelsavehub-api:test
+docker build -f apps/api/Dockerfile -t reelsavenow-api:test .
+docker run --rm -p 4000:4000 reelsavenow-api:test
 ```
 
 Build context must be the repo root (not `apps/api/`) — the Dockerfile copies `packages/types` and root `config/` into its `deps` stage. Confirmed working locally 2026-08-04, including a real request through the running container (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the bugs that surfaced getting here).

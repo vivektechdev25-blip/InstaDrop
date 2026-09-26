@@ -12,7 +12,7 @@ import type { Page } from "playwright";
  */
 
 export const USER_AGENT =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 export const NAVIGATION_TIMEOUT_MS = 20000;
 export const POST_LOAD_WAIT_MS = 2500;
 export const SLIDE_CLICK_WAIT_MS = 900;
@@ -76,67 +76,39 @@ export async function readPageMeta(page: Page): Promise<PageMeta> {
  * step - e.g. image/carousel posts never have this data at all.
  */
 export async function findProgressiveVideoUrl(page: Page): Promise<string | null> {
-  const result = await page.evaluate<string | null>(`
+  return page.evaluate<string | null>(`
     (() => {
-      function deepFind(node, depth) {
-        if (depth > 20 || node === null || typeof node !== "object") return null;
+      const scripts = Array.from(
+        document.querySelectorAll('script[type="application/json"][data-sjs]')
+      );
+
+      function deepFindVideoVersions(node, depth) {
+        if (depth > 14 || node === null || typeof node !== "object") return null;
         if (Array.isArray(node.video_versions) && node.video_versions.length > 0) {
           return node.video_versions;
         }
-        if (typeof node.video_url === "string" && node.video_url) {
-          return [{ url: node.video_url }];
-        }
         for (const key of Object.keys(node)) {
-          const found = deepFind(node[key], depth + 1);
+          const found = deepFindVideoVersions(node[key], depth + 1);
           if (found) return found;
         }
         return null;
       }
 
-      const dataScripts = Array.from(
-        document.querySelectorAll('script[type="application/json"][data-sjs]')
-      );
-      for (const script of dataScripts) {
+      for (const script of scripts) {
         try {
           const parsed = JSON.parse(script.textContent || "");
-          const versions = deepFind(parsed, 0);
-          if (versions && versions.length > 0) {
-            const types = versions.map((v) => v.type).join(",");
-            console.log("[findProgressiveVideoUrl] video_versions types=" + types + " count=" + versions.length);
-            // Instagram video_versions: lower-numbered types are DASH manifests
-            // (no audio). The highest-numbered type is the progressive mp4
-            // (h264+aac). Pick the highest type, not the first/last entry.
-            let best = versions[0];
-            for (const v of versions) {
-              if (typeof v.url === "string" && (typeof best.type !== "number" || (typeof v.type === "number" && v.type > best.type))) {
-                best = v;
-              }
-            }
-            if (typeof best.url === "string") return best.url;
+          const versions = deepFindVideoVersions(parsed, 0);
+          if (versions && versions[0] && typeof versions[0].url === "string") {
+            return versions[0].url;
           }
-        } catch { /* skip */ }
+        } catch {
+          // Not every data-sjs script tag is well-formed JSON we care
+          // about - skip and keep searching the rest.
+        }
       }
-
-      const allScripts = Array.from(document.querySelectorAll("script:not([src])"));
-      for (const script of allScripts) {
-        try {
-          const match = (script.textContent || "").match(/"video_url"\s*:\s*"(https?:\/\/[^"]+\.mp4[^"]*)"/);
-          if (match) return match[1].replace(/\\u0026/g, "&");
-        } catch { /* skip */ }
-      }
-
-      const ogVideo = document.querySelector('meta[property="og:video"]')?.getAttribute("content");
-      if (ogVideo && ogVideo.includes(".mp4")) return ogVideo;
-
       return null;
     })()
   `);
-  if (result) {
-    console.log("[findProgressiveVideoUrl] picked URL:", result.slice(0, 120));
-  } else {
-    console.log("[findProgressiveVideoUrl] no progressive URL found");
-  }
-  return result;
 }
 
 export function stripByteRangeParams(videoUrl: string): string {
