@@ -30,7 +30,7 @@ export default function PrivateContentPage() {
             This is a separate flow from the main downloader above, built specifically
             for content on your own private account. It works by using a temporary session
             cookie from your own logged-in Instagram session — the same way your browser
-            proves you're logged in.
+            proves you&apos;re logged in.
           </p>
 
           <div className="w-full max-w-xl rounded-lg border border-border bg-card p-4 text-left">
