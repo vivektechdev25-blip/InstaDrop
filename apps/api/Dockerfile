@@ -46,4 +46,4 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 WORKDIR /app/apps/api
 EXPOSE 4000
-CMD ["node", "dist/app.js"]
+CMD ["node", "dist/server.js"]
