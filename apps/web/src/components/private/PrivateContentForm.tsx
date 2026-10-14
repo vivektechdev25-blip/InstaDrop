@@ -29,7 +29,10 @@ export function PrivateContentForm() {
   const [isCookieVisible, setIsCookieVisible] = useState(false);
   const { toast } = useToast();
   const { status, post, errorMessage, submit } = usePrivateContentFetch();
-  const lastAnnouncedError = useRef<string | null>(null);
+  // Per submission, not per message text - see InputForm.tsx: keying on
+  // the text silenced the toast for a retry that failed the same way.
+  const [submissionCount, setSubmissionCount] = useState(0);
+  const lastAnnouncedSubmission = useRef(0);
 
   const isFetching = status === "FETCHING" || status === "VALIDATING";
   const isErrorState =
@@ -39,19 +42,20 @@ export function PrivateContentForm() {
     status === "ACCESS_DENIED";
 
   useEffect(() => {
-    if (!isErrorState || !errorMessage || errorMessage === lastAnnouncedError.current) return;
+    if (!isErrorState || !errorMessage || lastAnnouncedSubmission.current === submissionCount) return;
 
-    lastAnnouncedError.current = errorMessage;
+    lastAnnouncedSubmission.current = submissionCount;
     toast({
       title: TOAST_TITLES[status] ?? "Couldn't fetch this content",
       description: errorMessage,
       variant: "destructive",
     });
-  }, [status, errorMessage, isErrorState, toast]);
+  }, [status, errorMessage, isErrorState, submissionCount, toast]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!sessionCookie.trim() || !url.trim() || isFetching) return;
+    setSubmissionCount((count) => count + 1);
     void submit(sessionCookie, url);
   }
 
