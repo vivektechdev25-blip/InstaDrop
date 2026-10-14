@@ -10,7 +10,15 @@
 
 ## Rate limiting
 
-Public endpoints: 10 requests / 10 minutes / IP via `express-rate-limit`, in-memory (`apps/api/src/middlewares/rateLimiter.ts`). This is sufficient for the MVP's single-instance Render deployment.
+Three independent budgets, one `express-rate-limit` instance each, all in-memory (`apps/api/src/middlewares/rateLimiter.ts`, sized in `apps/api/src/constants/rateLimit.ts`). Exhausting one never affects the others — confirmed live via the `RateLimit-Policy` header each endpoint returns:
+
+| Endpoint | Budget | Why this number |
+|---|---|---|
+| `POST /api/v1/fetch` | 10 / 10 min / IP | Each request can cost a full browser render; this is the expensive operation worth throttling. |
+| `GET /api/v1/download` | 60 / 10 min / IP | **Changed 2026-10-14** — previously shared `/fetch`'s single 10-request counter, which meant one fetch plus saving the slides of a real carousel (up to 20 downloads) tripped a 429 partway through the user's own download. Downloads are bandwidth, not extraction, so they get a budget sized for "every slide of a long carousel, twice" — still capped, since the endpoint is an outbound proxy. |
+| `POST /api/v1/private/fetch` | 3 / 10 min / IP | Authenticates with a real session cookie — higher stakes than an anonymous public fetch. |
+
+This is sufficient for the MVP's single-instance Railway deployment.
 
 **Note:** in-memory rate limiting only holds its limit correctly on a single instance. If the API scales horizontally (multiple Render instances), each instance tracks its own counters, so the effective limit multiplies with instance count. Revisit with a distributed store (e.g. Redis-backed sliding window) before scaling out — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [TODO.md](./TODO.md).
 
@@ -28,13 +36,31 @@ Mitigations, each confirmed live rather than assumed:
 
 `GET /api/v1/download` proxy-streams whatever `url` it's given. Without a check, that makes it an open proxy — the API would fetch and relay *any* URL a caller supplies, which could be pointed at internal infrastructure or used to mask the origin of unrelated requests. `downloadMediaSchema.ts` restricts `url` to `*.cdninstagram.com` / `*.fbcdn.net` hostnames before the API ever makes the upstream request. Confirmed live: a non-Instagram-CDN URL is rejected with `400 INVALID_URL`.
 
+**Redirects are validated per hop (added 2026-10-14).** The schema check above only ever sees the URL the *caller* submitted. `fetch`'s default behavior follows redirects silently, so an allowlisted CDN URL that 302s somewhere else would have been followed without the allowlist ever seeing the second hop — the exact hole the allowlist exists to close. `downloadService.ts` now requests with `redirect: "manual"` and re-checks every hop's hostname against the same shared allowlist (`apps/api/src/constants/allowedCdnHosts.ts`, one definition used by both the schema and the service) before requesting it, with a 5-hop ceiling. Verified live against a real `*.fbcdn.net` media URL (complete 21.6MB MP4 streamed through correctly) and against a non-CDN URL (`400 INVALID_URL`). The off-allowlist branch is now **unit-tested** with a URL-keyed `fetch` stub. Off-allowlist targets, http downgrades and `file:`/`data:`/`javascript:` Locations are rejected *without being requested*, and removing the per-hop check fails 5 tests. A real CDN host redirecting off-allowlist has never been observed live.
+
+**HTTPS only (2026-10-14).** The shared check is `isAllowedCdnUrl()`: an `https:` scheme **and** an allowlisted host. Every real CDN URL is https. Plain http would let anything on the network path between the API and the CDN substitute the file being streamed, and other schemes are never legitimate media sources.
+
+**Hostname edge cases, tested:** a bare `fbcdn.net`, suffix lookalikes (`evilfbcdn.net`), the allowlisted name used as a subdomain (`fbcdn.net.evil.com`), trailing-dot hosts, IDN lookalikes (which become punycode and no longer match) and IP literals are all rejected. **Assessed, not mitigated:** the check is on hostnames, not resolved IPs. An allowlisted name resolving to a private address would need control of Meta's own DNS, so pinning resolved IPs was judged not worth its complexity.
+
+**Upstream timeout.** Getting response headers back is capped at 15s; the body stream deliberately is not, since a real reel is tens of megabytes. Without the first cap, a host that accepts the connection and never answers held the request open indefinitely — Express sets no default timeout. The stream is also torn down when the client disconnects mid-download, instead of continuing to pull CDN bytes into a response nobody is reading.
+
 ## CORS
 
-`app.use(cors({ origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" }))` in `apps/api/src/app.ts`. Found live while preparing for deployment: `CORS_ORIGIN` was documented in `.env.example` but the code was calling `cors()` with **no arguments at all** — the `cors` package's default is to allow every origin (`Access-Control-Allow-Origin: *`), silently contradicting the documented config. Fixed to actually read the env var.
+`cors({ origin: corsOrigins })` in `apps/api/src/app.ts`, where `corsOrigins` comes from `parseCorsOrigins(process.env.CORS_ORIGIN)` in `config/env.ts`, an exact-match allowlist. History: before deployment prep, the code called `cors()` with **no arguments**, which the `cors` package treats as allowing every origin (`Access-Control-Allow-Origin: *`). That silently contradicted the documented config, and it was fixed to read the env var.
 
-Defaults to `http://localhost:3000` (not a wildcard) when unset, so a missing `CORS_ORIGIN` in production fails safe — it blocks the real frontend (loudly, obviously broken) rather than failing open (silently allowing any origin). **Production deployment must set `CORS_ORIGIN` to the exact deployed frontend domain** — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+- **Fails safe when unset:** the default is `http://localhost:3000`, never a wildcard. A missing `CORS_ORIGIN` in production blocks the real frontend (loudly, obviously broken) rather than allowing any origin.
+- **Fails fast when malformed (2026-10-14):** entries are compared to the browser's `Origin` header by exact string, and browsers always send a bare, lowercase `scheme://host[:port]`. A trailing slash, a path, a mixed-case host or `*` used to be accepted and then silently never match. Each now stops the boot with the exact value to use. Verified in the production container and covered by `env.test.ts`.
+- **Netlify deploy previews are deliberately not allowed** to call the production API: no `*.netlify.app` pattern, only explicit origins. Covered by `app.test.ts`.
 
-Confirmed live: a disallowed `Origin` gets back a response whose `Access-Control-Allow-Origin` doesn't match its own origin, which is what causes browsers to block the response from being read by that origin's JavaScript (the standard mechanism this middleware relies on — the server doesn't refuse the request outright, the browser enforces the mismatch).
+**Production deployment must set `CORS_ORIGIN` to the exact deployed frontend origin(s)**; see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+For a disallowed `Origin`, the response simply carries no `Access-Control-Allow-Origin`. The browser enforces that by blocking the calling page's JavaScript from reading it; the server doesn't refuse the request outright.
+
+## Error responses and logging (2026-10-14)
+
+- **Clients only ever receive the response envelope:** a static message plus a machine-readable `code`. They never get stack traces, file paths or Playwright messages. Tested for validation errors, 404s, unknown errors, and an all-tiers-failed 502 whose underlying error mentions an internal path.
+- **Logs record the stack (which includes the message), never the whole error object.** An error's enumerable properties can carry request data. The `express.json()` parse error carries the raw body, so a malformed `/private/fetch` request used to write the caller's session cookie to the logs, and get a 500 for what is a 400 client error. That leak was reproduced directly against the original handler before it was fixed.
+- **In the own-private-content flow, unexpected errors have the session cookie (raw and URL-decoded) redacted before logging**, even though Playwright's errors aren't expected to contain it. "Not expected to" is an assumption about a third-party library's error text, and the cost of it being wrong once is a live credential in the logs.
 
 ## Private account handling
 
@@ -71,7 +97,7 @@ Recommended approach: **session cookie, own content only**. Options evaluated:
 - Never store session cookies (in-memory only, per-request) — **done.** Scoped to one Playwright `BrowserContext` created and `close()`d (in a `finally` block) within a single request; never written to a database, log, cache, or any file.
 - HTTPS enforced on all endpoints handling cookies — deployment-time requirement, not app-code-enforceable in this local environment; noted for [DEPLOYMENT.md](./DEPLOYMENT.md).
 - Cookies redacted from all logs — **confirmed live**, see below.
-- Stricter rate limit than the public endpoint — **done and confirmed live.** 3 req / 10 min / IP (`PRIVATE_CONTENT_RATE_LIMIT` in `apps/api/src/constants/rateLimit.ts`), a genuinely separate `express-rate-limit` instance (`privateContentRateLimiter`, via a `createRateLimiter()` factory) from the public endpoint's 10/10min — tripping one's budget confirmed live not to affect the other's.
+- Stricter rate limit than the public endpoint — **done and confirmed live.** 3 req / 10 min / IP (`PRIVATE_CONTENT_RATE_LIMIT` in `apps/api/src/constants/rateLimit.ts`), a genuinely separate `express-rate-limit` instance (`createRateLimiters().privateContent` in `middlewares/rateLimiter.ts`) from the public endpoint's 10/10min — tripping one's budget confirmed live not to affect the other's.
 - Server-side ownership verification on every request, never trusting client claims — **done, fail-closed by design; the specific extraction logic is not yet live-verified** (see [ARCHITECTURE.md](./ARCHITECTURE.md#own-private-content-flow-session-cookie-authenticated) and [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#own-private-content-authenticated-extraction-unverified-2026-08-05)).
 - Clear user disclosure before first use — **done.** `/private`'s page copy states plainly what the cookie is used for and its single-request lifetime before the form.
 - Detect and handle expired sessions with a clear `SESSION_EXPIRED` error — **done and confirmed live.** A well-formed-but-fake `sessionCookie` sent against a real reel URL correctly returned `401 SESSION_EXPIRED`, confirming the `/accounts/login/` redirect-detection path fires against real Instagram, not just in code review.

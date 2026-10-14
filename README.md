@@ -7,12 +7,11 @@ See [docs/PROJECT_OVERVIEW.md](./docs/PROJECT_OVERVIEW.md) for the full product 
 ## Monorepo layout
 
 ```
-apps/web       Next.js 14 frontend (App Router, TypeScript, Tailwind + shadcn/ui)
-apps/api       Express backend microservice (TypeScript, Dockerized)
+apps/web       Next.js 14 frontend (App Router, TypeScript, Tailwind + shadcn/ui) — Netlify
+apps/api       Express backend microservice (TypeScript, Dockerized) — Railway
 packages/types Shared TypeScript DTOs (frontend + backend)
 docs/          Full documentation set (see below)
 config/        Shared configs (tsconfig base, etc.)
-scripts/       Build/deploy/dev scripts
 ```
 
 ## Prerequisites
@@ -34,6 +33,9 @@ pnpm dev:web
 
 # run the backend API
 pnpm dev:api
+
+# lint, typecheck, test and build everything (what CI runs)
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
 ## Documentation

@@ -4,7 +4,40 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Automated test, lint and CI foundation (2026-10-14).** Vitest in all three packages: 173 hermetic tests, with no network, real Instagram or real browser needed. ESLint 8.57 everywhere (`eslint-config-next@14` doesn't support ESLint 9). Root `lint`/`typecheck`/`test`/`build` scripts. `.github/workflows/ci.yml` runs all of them on Node 20 and 24, then builds the API Docker image; the workflow passes actionlint. Every regression test was mutation-checked: the fix was temporarily reverted and the test confirmed to fail. See [TESTING.md](./TESTING.md).
+- **Tier 1 circuit breaker** (`circuitBreaker.ts`): Instagram refuses Tier 1's anonymous GraphQL query (401, `require_login: true`, reproduced in isolation). A 401/403/429 now disables Tier 1 for 15 minutes, logged once, instead of costing ~750 ms on every request. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+- **Startup env validation** (`config/env.ts`): a malformed `PORT` or a `CORS_ORIGIN` entry that can never match a browser `Origin` (trailing slash, path, mixed case, `*`) now fails the boot with the exact value to use.
+- `docs/deploy/netlify.toml.proposed`: a reviewed Netlify config, deliberately not active.
+
+### Changed
+
+- **API entry point is now `dist/server.js`.** `app.ts` only builds the app (`createApp()`), so it can be tested in-process; `server.ts` binds the port and handles signals. Updated the `package.json` `main`/`start`/`dev` scripts and the Dockerfile `CMD`. A Railway start-command override, if one exists, must change too.
+- **The CDN allowlist is HTTPS-only**, at both the schema and the per-hop check.
+- **Hosting docs rewritten for Netlify + Railway** (they described Vercel + Render). `render.yaml` is kept but unused.
+- **Removed:** `@tanstack/react-query` (the provider was mounted but no query or mutation existed anywhere), `hooks/useDebounce.ts`, the 501 stub route `app/api/fetch/route.ts` (which would have deployed as a pointless Netlify function), and the root `package-lock.json` (zero dependencies, and npm can't install this workspace at all). No measurable bundle change: First Load JS stays 178 kB for `/`.
+
 ### Fixed
+
+- **Second correctness and security pass (2026-10-14).** Root causes are in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#other-defects-found-and-fixed-on-2026-10-14).
+  - **A malformed JSON body was logged raw, session cookie included, and answered 500.** It now returns a 400/413 envelope, and unknown errors log only the stack. A cookie that appears inside a library error is also redacted in the private flow.
+  - **`instagram-url-direct` could block for 31 s or more before Tier 2 started**, through its default 5 retries on 403/429 plus `Retry-After`. It's now called with no retries.
+  - **The frontend turned non-Instagram links with a post-shaped path into real Instagram URLs**, fetching an unrelated post.
+  - **The UI showed no toast when a retry failed the same way, and couldn't tell a timeout from a network failure.**
+  - **When rate-limited, the input's `aria-describedby` pointed at an element that didn't exist.**
+  - **`errorHandler` tried to write JSON onto a half-sent download response.**
+  - **`Content-Length` was forwarded for a body that `fetch` had decompressed** (defensive fix).
+  - **A clean install failed when pnpm was only reachable through Corepack:** the `prepare` script in `packages/types` called bare `pnpm`.
+  - **A JSX apostrophe on `/private` that failed lint.**
+
+- **Reliability and correctness pass (2026-10-14).** Six defects found by auditing the running code rather than the docs, each verified against a real browser/API where it was reproducible, and each flagged honestly where it wasn't. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the full root-cause write-ups.
+  - **A dead Chromium was permanent** (`browserManager.ts`): the cached launch promise was never cleared except on shutdown, so an OOM-killed browser — documented as *expected* on small instances — left Node alive, `/health` answering, no restart firing, and every later Tier 2 scrape failing on the same dead object. Now cleared on `disconnected` and on launch rejection, with an identity check so a stale event can't discard a healthy relaunch. Verified live by killing a real browser and confirming the next request relaunches.
+  - **Unbounded browser contexts** (`browserManager.ts`): both scraping flows opened contexts with no shared limit on an instance whose constraint is Chromium's memory. `withBrowserContext()` is now the only way to get one and owns the cap (2 active, 8 queued, fast `503` beyond), the shared UA/viewport, and context cleanup on every exit path. Verified live: peak 2 across 6 parallel requests; 14 simultaneous → 10 served, 4 clean 503s.
+  - **Downloads consumed the extraction budget** (`rateLimiter.ts`, `routes/index.ts`): `/fetch` and `/download` shared one 10-per-10-minute counter, so a fetch plus a carousel's slides tripped a 429 mid-download. `/download` now has its own 60-per-10-minute limiter. Confirmed live via each endpoint's `RateLimit-Policy` header.
+  - **Error envelopes saved as media files** (`PreviewCard.tsx`): the blob download never checked `response.ok`, writing a `429`'s JSON body to disk as `reelsavenow_<shortcode>.mp4`. Now checks the status, surfaces the API's own message through the existing toast, scopes the `window.open` fallback to transport-level failures only, and guards against a double-click starting a duplicate transfer.
+  - **Redirects bypassed the download allowlist** (`downloadService.ts`): the schema only validated the caller's URL while `fetch` followed redirects silently. Now `redirect: "manual"` with a per-hop hostname check against a shared allowlist (`constants/allowedCdnHosts.ts`) and a 5-hop ceiling. The off-allowlist redirect branch itself isn't locally reproducible and is flagged as logic-verified, not live-verified.
+  - **No upstream timeout, no client-disconnect teardown** (`downloadService.ts`): a CDN host that never answered held the request open indefinitely (Express sets no default), and a cancelled download kept pulling CDN bytes into a response nobody was reading. Added a 15s *header-phase* cap — deliberately not applied to the body, which would abort healthy large transfers — and stream destruction on client disconnect. Verified live with a complete 21.6MB real MP4 (`avc1` + `mp4a` both present, so the audio behavior this project has regressed twice is intact).
 - **Deployment readiness for container hosting (2026-08-18).** Audited the API specifically for failure modes that only appear inside a container, and fixed five. Backend host switched from Railway to **Render** in the docs — nothing in the code was Railway-specific, both are Docker-based and the same `apps/api/Dockerfile` deploys unchanged to either.
   - **Chromium launch flags** (`browserManager.ts`): added `--disable-dev-shm-usage` and `--no-sandbox`. Container runtimes mount `/dev/shm` at 64MB, which Chromium exhausts partway through a real image-heavy Instagram page, and the Playwright image runs as root, under which Chromium's setuid sandbox refuses to start. Neither reproduces in local dev — this would have been a production-only crash. Verified a real reel still scrapes end-to-end with the flags applied.
   - **`GET /health`**: no route previously answered a bare GET, leaving nothing for a platform health check to poll and no safe URL to confirm a deploy by. Deliberately dependency-free, so it answers instantly even while a scrape occupies the worker.

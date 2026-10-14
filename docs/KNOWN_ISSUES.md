@@ -1,5 +1,88 @@
 # Known Issues
 
+## Open: production API runs Node 24, everything else targets Node 20 — found 2026-10-14
+
+`engines` says `>=20`, the proposed Netlify config builds on 20, and the docs described Node 20 throughout — but the API's Docker base image (`mcr.microsoft.com/playwright:v1.62.1-jammy`) ships **Node v24.18.1** (verified: `docker run --entrypoint node <image> --version`). `>=20` is technically satisfied, so nothing is broken, but production was never the version anything was tested on. CI now runs on both 20 and 24 (matrix), and the full suite passes on both locally (24 natively, 20 in a clean `node:20` container). Pinning one version would mean choosing a different Playwright base image or installing Node explicitly in the Dockerfile — a deliberate decision, not made here.
+
+## Open: `trust proxy = 1` is unverified on Railway — 2026-10-14
+
+Confirmed correct on Render; Railway's edge hop count is unverified. It decides which IP each rate-limit counter belongs to. Verification steps are in [DEPLOYMENT.md](./DEPLOYMENT.md#trust-proxy).
+
+## Tier 1 (`instagram-url-direct`) is refused by Instagram — resolved with a circuit breaker, 2026-10-14
+
+**Cause, reproduced in isolation (not inferred from the API log):** replaying the package's two requests directly, the CSRF fetch succeeds (200, `csrftoken` cookie set) and the persisted GraphQL query (`doc_id 9510064595728286`, `POST /graphql/query`) gets **401** with `{"message":"Please wait a few minutes before you try again.","require_login":true,"status":"fail"}`. A real reel and a nonexistent shortcode get the identical response, so it isn't content-specific: Instagram requires login for this anonymous query. `2.0.7` is already the latest published version, so there's no upgrade path, and adding authentication to the public flow is out of scope by design.
+
+**Second defect found in the same package:** our code called `instagramGetUrl(url)` with the package defaults, `{ retries: 5, delay: 1000 }`. On a 403/429 it retries five times with doubling delays (31s or more) and honors `Retry-After` however large — longer than the frontend's 30s timeout before Tier 2 had even started. A 401 isn't in its retry list, which is the only reason the observed failure was fast.
+
+**Decision:** Tier 1 is kept, not removed, behind a circuit breaker (`circuitBreaker.ts`). A 401/403/429 disables it for 15 minutes, logged once per cooldown; after that it gets one fresh attempt, so it recovers on its own if Instagram lifts the wall. It's called with `{ retries: 0 }`, and it still throws a plain `Error` (never an `AppError`), so the Tier 2 fallback is preserved. Unit-tested and mutation-checked in `scraperTiers.test.ts`.
+
+**Measured** (`[live-external]`, one reel, one network, 2026-10-14):
+
+| Path | Latency |
+|---|---|
+| Tier 1 refusal alone (direct replay) | 780 ms, 752 ms |
+| `/fetch`, cold (Chromium launch + one Tier 1 attempt + Tier 2) | 10.2 s (local), 8.8 s (container) |
+| `/fetch`, warm, Tier 1 skipped by the breaker | 3.6 s, 4.9 s (local); 3.3 s, 5.3 s (container, 2 in parallel) |
+
+So no live path currently meets the `<800ms` objective in [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md). The breaker removes the ~0.75 s Tier 1 cost from every request after the first in each cooldown. Only reels were measured; no public image or carousel URL was available within this session's request budget.
+
+## Other defects found and fixed on 2026-10-14
+
+Each has a regression test that was confirmed to fail with the fix reverted.
+
+- **Malformed JSON wrote the raw request body (session cookie included) to the logs, and answered 500.** The `express.json()` parse error carries the raw text on `error.body`, and `errorHandler` passed the whole object to `console.error`. Reproduced directly against the original handler (`LOGGED CONTAINS COOKIE: true`). It now returns a 400/413 envelope, and unknown errors log only the stack. `errorHandler` also defers to Express once headers are sent (a mid-stream download failure) instead of trying to write JSON onto a half-sent response.
+- **The frontend rewrote any link with a `/p/`, `/reel/` or `/tv/` path into an Instagram URL.** `cleanInstagramUrl` kept the path and discarded the host, so a `facebook.com/reel/123` or lookalike-domain link silently fetched whatever Instagram post shared that ID. Only Instagram's own hosts are normalized now.
+- **Retrying a link that failed the same way showed no toast.** Toasts were deduplicated by message text; they're now deduplicated per submission.
+- **Timeouts and network failures were indistinguishable** in the UI ("Something went wrong"), which is exactly the diagnosis problem `apiClient.ts` documents. `lib/apiErrors.ts` now gives each its own message.
+- **In the rate-limited state, the URL input's `aria-describedby` pointed at an element that didn't exist.**
+- **The CDN allowlist accepted any scheme on an allowlisted host** (`http:`, `ftp:`). It's now HTTPS only, at both validation points.
+- **`Content-Length` was forwarded even when `fetch` had decompressed the body.** Defensive fix; not observed with real media.
+- **`PORT` and `CORS_ORIGIN` misconfigurations failed silently** (a NaN port; a trailing-slash or mixed-case origin that never matches). Both now stop the boot with the exact value to use, verified in the real container.
+- **A clean install failed whenever pnpm was only reachable through Corepack:** the `prepare` script in `packages/types` called bare `pnpm`. It now calls `tsc` directly.
+- **Rate limiters were module-level singletons**, so counts leaked between app instances. That was harmless in production (one app) but made the limits untestable. They're now created per app.
+
+## Measured: API container memory — 2026-10-14
+
+`docker stats` while scraping a real reel in the production image, sampled about every 1.5 s, so real peaks may be somewhat higher: **104 MiB idle → ~522 MiB peak with one context → ~583 MiB peak with two concurrent contexts** (the cap). The warm browser stays resident at about 440–450 MiB between requests. Recommendation for Railway: at least **1 GB**, for headroom on heavier pages and carousels; one reel is a narrow sample.
+
+## Chromium dying left the API permanently broken until a manual restart — fixed 2026-10-14
+
+`browserManager.ts` cached its launch promise for the lifetime of the process and only ever cleared it in `closeBrowser()`. When Chromium died underneath it — an OOM kill mid-scrape, which [DEPLOYMENT.md](./DEPLOYMENT.md) documents as *expected* on smaller container instances — the Node process itself survived: `/health` kept answering, so no platform restart fired, while `getBrowser()` went on handing out the same dead `Browser` object and every subsequent Tier 2 scrape failed. A rejected launch was cached the same way, making one transient failure permanent too.
+
+**Fixed** by clearing the cached promise on Chromium's own `disconnected` event and on launch rejection, with an identity check so a stale event can't discard a healthy relaunch a later request has already cached.
+
+Verified live against real Chromium, not reasoned about: launch a browser, kill it, confirm the dead object fails exactly as the old cache would have (`browser.newContext: Target page, context or browser has been closed`), then confirm the next request through `withBrowserContext()` transparently relaunches and renders a page. Also confirmed `closeBrowser()` is now safe to call twice, and safe after the browser has already died — previously it could reject inside the SIGTERM handler and leave the process hanging instead of exiting.
+
+## Nothing capped concurrent browser contexts — fixed 2026-10-14
+
+Both scraping flows (`playwrightTier.ts` and `privateContentService.ts`) created their own browser contexts with no shared limit, on an instance whose documented constraint is Chromium's memory. Enough simultaneous requests would OOM-kill the browser, which — before the fix above — then broke the service permanently.
+
+**Fixed** by making `withBrowserContext()` in `browserManager.ts` the only way to get a context: it owns the concurrency cap (2 active, 8 queued, a fast `503` past that), the shared UA/viewport pair, and closing the context on every exit path. Both flows now share one cap instead of competing.
+
+Verified live: peak concurrency held at exactly 2 across 6 parallel requests; 14 simultaneous requests produced 10 served and 4 clean `503`s with no crashes or hangs. A real end-to-end reel fetch through the refactored Tier 2 still returns the audio-inclusive progressive MP4 (`avc1` + `mp4a` both present in the downloaded file) — the behavior this project has regressed twice before.
+
+## Downloads consumed the extraction rate limit — fixed 2026-10-14
+
+`/fetch` and `/download` shared a single `express-rate-limit` instance, so the 10-requests-per-10-minutes budget counted both. One fetch (1) plus saving the slides of a real carousel (up to 20) exhausted it partway through the user's own download, with no way to tell a genuine abuse limit from "you asked for your tenth slide".
+
+**Fixed** with a separate limiter for `/download` (60 / 10 min / IP), sized for downloading every slide of a long carousel twice over, while keeping a ceiling since the endpoint is an outbound-bandwidth proxy. Confirmed live via the `RateLimit-Policy` header on each endpoint: `60;w=600` on `/download`, `10;w=600` on `/fetch`, `3;w=600` on `/private/fetch`, with `/download`'s counter decrementing only its own budget.
+
+## Error responses were saved to disk as `.mp4`/`.jpg` files — fixed 2026-10-14
+
+`PreviewCard.tsx` fetched the download URL and blob-saved the response body without ever checking `response.ok`. Any error from the API — most realistically a `429` from the shared limiter above — is a JSON envelope, so the user got a file named `reelsavenow_<shortcode>.mp4` containing `{"success":false,...}`: a download that looks corrupt rather than rate-limited. The `catch` fallback never fired for these, because an HTTP error status isn't a thrown `fetch` error.
+
+**Fixed** by checking `response.ok` before touching the body, reading the envelope's own `message` (with a status-based fallback for non-envelope failures like a platform `502` HTML page) and surfacing it through the existing destructive toast. The `window.open` fallback is now scoped to what it was actually for — transport-level failures (offline, CORS, DNS), where a plain navigation lets the browser do the download itself. The same pass added an in-flight guard: the button stays clickable for the seconds a video transfer takes, and a second click started a duplicate transfer that also spent another request from the download budget.
+
+## The download proxy followed redirects past its own allowlist, and could hang forever — fixed 2026-10-14
+
+Two separate defects in `downloadService.ts`, both invisible in normal use:
+
+- **Redirects bypassed the SSRF allowlist.** `downloadMediaSchema.ts` validates the URL the caller submitted, but `fetch` follows redirects silently by default. So an allowlisted CDN URL that 302s elsewhere would have been fetched and relayed without the allowlist ever seeing the second hop. Fixed with `redirect: "manual"`, a per-hop check against a now-shared allowlist (`constants/allowedCdnHosts.ts`, one definition for both the schema and the service), and a 5-hop ceiling.
+  - **`[unit]`:** with a URL-keyed `fetch` stub, an off-allowlist target, an http downgrade, and `file:`/`data:`/`javascript:` Locations are all rejected *without being requested*. Loops and a 6th hop fail, and relative Locations resolve. Removing the per-hop check fails 5 tests.
+  - **`[live-external]`:** a real `*.fbcdn.net` URL streams a complete 21.6 MB MP4 through the loop.
+  - A real CDN host redirecting off-allowlist has never been observed live (it isn't reproducible), so that case is unit-verified, not live-verified.
+- **No upstream timeout.** Express sets none by default, so a host that accepted the connection and never answered held the request (and the user's pending download) open indefinitely. Fixed with a 15 s cap on *receiving headers only*, cleared before the body is read; capping the body too would abort large, perfectly healthy video transfers. Both behaviors are unit-tested with fake timers. The stream is also destroyed when the client disconnects mid-download.
+
 ## PreviewCard showed "@unknown" for captionless posts — fixed 2026-08-06
 
 Real screenshot from a live device showed the header reading "@unknown" while the correct username was visibly present in the text below it, on a real fetched reel. The initial hypothesis (two different fields being read for the header vs. the caption line) turned out to be wrong once investigated - both actually come from the same single `parseOgDescription()` call in `mediaExtractionHelpers.ts`, which already feeds the same parsed username into both `author.username` and (indirectly) the caption. There's no second field to drift; the bug was that this one shared function could fail completely.

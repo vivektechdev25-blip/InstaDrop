@@ -1,3 +1,7 @@
+# UNUSED (2026-10-14): the API is hosted on Railway (railway.json), not Render.
+# Kept only because removing deploy config is the owner's call; see
+# docs/DEPLOYMENT.md. Recommended for removal.
+#
 # Render Blueprint - deploys apps/api as a Docker web service.
 #
 # Why this file exists: selecting the service settings by hand in Render's

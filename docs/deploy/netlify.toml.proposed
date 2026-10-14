@@ -1,0 +1,46 @@
+# PROPOSAL ONLY - this file is deliberately NOT active.
+#
+# Netlify reads netlify.toml from the site's *package directory*, and a
+# committed file overrides the matching dashboard settings on the next
+# deploy. Compare every value below with the live dashboard
+# (Site configuration -> Build & deploy) before adopting it. To adopt:
+# move it to apps/web/netlify.toml.
+#
+# Sources (checked 2026-10-14):
+#   https://docs.netlify.com/build/configure-builds/monorepos/
+#   https://docs.netlify.com/configure-builds/manage-dependencies/
+#   https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/
+#
+# Dashboard-only settings this file can't express:
+#   Package directory: apps/web   (UI-only, per Netlify's monorepo docs)
+#   Base directory:    (empty = repo root - where pnpm-lock.yaml lives, so
+#                       Netlify detects pnpm and installs the whole workspace)
+
+[build]
+  # Run from the repo root. The trailing "..." builds the web app's
+  # workspace dependencies first (@reelsavenow/types -> dist/), which
+  # next build needs to resolve the shared DTOs. Verified locally from the
+  # repo root on 2026-10-14.
+  command = "pnpm --filter @reelsavenow/web... build"
+  # No `publish` key: Netlify's OpenNext adapter (@netlify/plugin-nextjs,
+  # applied automatically for Next.js >= 13.5) handles the .next output.
+  # Netlify recommends NOT pinning or declaring the plugin manually.
+
+[build.environment]
+  # Matches engines (>=20) and the CI/Docker target. Without it Netlify uses
+  # its image default, which may be a different major.
+  NODE_VERSION = "20"
+  # pnpm's version comes from the root package.json "packageManager" field
+  # (pnpm@9.0.0) via Corepack - nothing to set here.
+  #
+  # NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_SITE_URL are inlined into the
+  # client bundle at BUILD time (verified: the value appears in
+  # .next/static chunks). Set them in the dashboard, not here - they're
+  # environment-specific, and changing one needs a redeploy to take effect:
+  #   NEXT_PUBLIC_API_BASE_URL = https://<railway-api-domain>/api/v1
+  #   NEXT_PUBLIC_SITE_URL     = https://<netlify-production-domain>
+  #
+  # Only if the build fails with Next.js module-resolution errors under
+  # pnpm (Netlify documents this for Next.js + pnpm):
+  #   PNPM_FLAGS = "--shamefully-hoist"
+  # Not added by default: the local pnpm build doesn't need it.
