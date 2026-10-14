@@ -130,14 +130,12 @@ export function InputForm({ initialUrl }: InputFormProps) {
         </Button>
       </form>
 
-      {status === "ERROR" && errorMessage ? (
+      {/* One element for both error states: the input's aria-describedby
+          points at this id whenever there's an errorMessage, and the
+          rate-limited variant used to render without it - a dangling
+          reference for screen readers. */}
+      {(status === "ERROR" || status === "RATE_LIMITED") && errorMessage ? (
         <p id="instagram-url-error" role="alert" className="text-left text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      {status === "RATE_LIMITED" && errorMessage ? (
-        <p role="alert" className="text-left text-sm text-destructive">
           {errorMessage}
         </p>
       ) : null}
