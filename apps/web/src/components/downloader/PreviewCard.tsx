@@ -1,19 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
-import type { InstagramPost } from "@reelsavenow/types";
+import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
+import type { ApiErrorResponse, InstagramPost } from "@reelsavenow/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { MediaViewer } from "@/components/downloader/MediaViewer";
-import { buildDownloadFilename } from "@/lib/downloadUrl";
+import { buildDownloadFilename, buildDownloadUrl } from "@/lib/downloadUrl";
+import { useToast } from "@/hooks/useToast";
 
 export interface PreviewCardProps {
   post: InstagramPost;
 }
 
+/**
+ * The API's error responses are JSON envelopes, not media. Reading the
+ * real message out of one is what lets this surface "too many requests"
+ * instead of writing that envelope to disk as a .mp4 (see handleDownload).
+ */
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as ApiErrorResponse;
+    if (payload?.message) return payload.message;
+  } catch {
+    // Not every failure is the API's own envelope - a platform-level 502
+    // returns an HTML page. Fall through to a status-based message.
+  }
+
+  return response.status === 429
+    ? "Too many downloads in a short time. Please try again in a few minutes."
+    : "Could not download this media right now. Please try again.";
+}
+
 export function PreviewCard({ post }: PreviewCardProps) {
   const [slideIndex, setSlideIndex] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const { toast } = useToast();
   const slideCount = post.media.length;
   const currentMedia = post.media[slideIndex];
 
@@ -24,26 +46,48 @@ export function PreviewCard({ post }: PreviewCardProps) {
   const goToSlide = (nextIndex: number) => setSlideIndex(((nextIndex % slideCount) + slideCount) % slideCount);
 
   async function handleDownload() {
+    // A video download takes real seconds, during which the button stays
+    // clickable; a second click would start a duplicate transfer and spend
+    // another request from the download rate limit's budget.
+    if (isDownloading || !currentMedia) return;
+
+    const downloadUrl = buildDownloadUrl(currentMedia, filename);
+    setIsDownloading(true);
+
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
-      const response = await fetch(
-        `${baseUrl}/download?url=${encodeURIComponent(currentMedia.url)}&filename=${encodeURIComponent(filename)}`
-      );
+      const response = await fetch(downloadUrl);
+
+      // Checked before touching the body: a 429/502 from the API is a JSON
+      // error envelope, and blindly blob-ing it saved that envelope to the
+      // user's disk as reelsavenow_<shortcode>.mp4 - a file that looks
+      // like a failed download rather than a rate limit they can wait out.
+      if (!response.ok) {
+        toast({
+          title: response.status === 429 ? "Too many requests" : "Download failed",
+          description: await readErrorMessage(response),
+          variant: "destructive",
+        });
+        return;
+      }
+
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = filename;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = filename;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      window.open(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"}/download?url=${encodeURIComponent(currentMedia.url)}&filename=${encodeURIComponent(filename)}`,
-        "_blank"
-      );
+      // Only reachable for a transport-level failure (offline, CORS,
+      // DNS) - an HTTP error status is handled above. A plain navigation
+      // lets the browser perform the download itself, which doesn't need
+      // CORS to succeed.
+      window.open(downloadUrl, "_blank");
+    } finally {
+      setIsDownloading(false);
     }
   }
 
@@ -104,10 +148,19 @@ export function PreviewCard({ post }: PreviewCardProps) {
           </p>
         ) : null}
 
-        <Button type="button" onClick={handleDownload} className="w-full">
-          <Download className="h-4 w-4" aria-hidden="true" />
-          Download {currentMedia.type === "video" ? "video" : "photo"}
-          {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
+        <Button type="button" onClick={handleDownload} disabled={isDownloading} className="w-full">
+          {isDownloading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Downloading…
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Download {currentMedia.type === "video" ? "video" : "photo"}
+              {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
+            </>
+          )}
         </Button>
       </CardContent>
     </Card>
