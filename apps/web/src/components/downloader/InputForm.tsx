@@ -32,28 +32,39 @@ export function InputForm({ initialUrl }: InputFormProps) {
   const { readText } = useClipboard();
   const { toast } = useToast();
   const { status, post, errorMessage, submit } = useInstagramDownloader();
-  const lastAnnouncedError = useRef<string | null>(null);
+  // Toasts are deduplicated per submission, not per message text. Keying
+  // on the text (as this used to) meant retrying the same failing link -
+  // the most natural thing to do after an error - produced no toast at
+  // all, so the retry looked like it hadn't happened.
+  const [submissionCount, setSubmissionCount] = useState(0);
+  const lastAnnouncedSubmission = useRef(0);
   const hasAutoSubmitted = useRef(false);
 
   const isFetching = status === "FETCHING" || status === "VALIDATING";
 
+  function startSubmission(rawUrl: string) {
+    setSubmissionCount((count) => count + 1);
+    void submit(rawUrl);
+  }
+
   useEffect(() => {
     if (!initialUrl || hasAutoSubmitted.current) return;
     hasAutoSubmitted.current = true;
+    setSubmissionCount((count) => count + 1);
     void submit(initialUrl);
   }, [initialUrl, submit]);
 
   useEffect(() => {
     if (status !== "ERROR" && status !== "RATE_LIMITED") return;
-    if (!errorMessage || errorMessage === lastAnnouncedError.current) return;
+    if (!errorMessage || lastAnnouncedSubmission.current === submissionCount) return;
 
-    lastAnnouncedError.current = errorMessage;
+    lastAnnouncedSubmission.current = submissionCount;
     toast({
       title: status === "RATE_LIMITED" ? "Too many requests" : "Couldn't fetch this link",
       description: errorMessage,
       variant: "destructive",
     });
-  }, [status, errorMessage, toast]);
+  }, [status, errorMessage, submissionCount, toast]);
 
   async function handlePasteFromClipboard() {
     const clipboardText = await readText();
@@ -65,7 +76,7 @@ export function InputForm({ initialUrl }: InputFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!url.trim() || isFetching) return;
-    void submit(url);
+    startSubmission(url);
   }
 
   return (
@@ -119,14 +130,12 @@ export function InputForm({ initialUrl }: InputFormProps) {
         </Button>
       </form>
 
-      {status === "ERROR" && errorMessage ? (
+      {/* One element for both error states: the input's aria-describedby
+          points at this id whenever there's an errorMessage, and the
+          rate-limited variant used to render without it - a dangling
+          reference for screen readers. */}
+      {(status === "ERROR" || status === "RATE_LIMITED") && errorMessage ? (
         <p id="instagram-url-error" role="alert" className="text-left text-sm text-destructive">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      {status === "RATE_LIMITED" && errorMessage ? (
-        <p role="alert" className="text-left text-sm text-destructive">
           {errorMessage}
         </p>
       ) : null}

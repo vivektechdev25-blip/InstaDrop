@@ -6,7 +6,7 @@ ReelSaveNow is a high-performance, privacy-focused, zero-friction web applicatio
 
 ## Core objectives
 
-- **Sub-second extraction latency** — process and return media metadata in under 800ms
+- **Sub-second extraction latency** — process and return media metadata in under 800ms. *Status (measured 2026-10-14): not currently met. Only Tier 1 could ever reach it, and Instagram now refuses Tier 1's anonymous query; live extraction is Tier 2, at ~3.5–5 s warm. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).*
 - **Zero user friction** — 100% guest-accessible, no login, no registration, no paywalls
 - **SEO & organic dominance** — SSR architecture, >95 Lighthouse score, rich JSON-LD markup
 - **Resilient architecture** — multi-tier fallback scrapers to survive Instagram's DOM changes

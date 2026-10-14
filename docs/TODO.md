@@ -19,7 +19,7 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Fix Tier 2 (Playwright) image resolution — confirmed live: recovered 1350x1688 (340KB) from what was a 640x640 (25KB) cropped `og:image`, verified by downloading the actual file and checking its real pixel dimensions. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#tier-2-playwright-image-quality-gap-fixed-2026-08-04)
 
 ## Day 3 — Client integration & security
-- [x] Wire React Query hooks (`useInstagramDownloader`) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts
+- [x] Wire the fetch hook (`useInstagramDownloader`, a plain `useReducer` + axios state machine — React Query was installed but never used, and was removed 2026-10-14) to `/api/v1/fetch` — hook is live and calling the real endpoint, now returns real data for public posts
 - [x] Loading skeletons + error toasts
 - [x] Build `PreviewCard` (video player, carousel swiper, per-slide download) and wire the real download trigger — confirmed live in an actual browser (Playwright screenshot) for image, reel, and (since) real carousel posts
 - [x] Verify `express-rate-limit` enforces 10 req / 10 min / IP on the running API — confirmed live: 12 rapid requests to `/api/v1/fetch` allowed the first 10 and returned `429` with `RateLimit-*`/`Retry-After` headers and `code: "RATE_LIMITED"` on requests 11-12
@@ -36,9 +36,11 @@ Active task list. Keep this current — remove items once shipped and note them 
 - [x] Keyboard nav + ARIA pass — confirmed via a real Lighthouse audit (100 accessibility) plus a manual Playwright-driven keyboard `Tab`-order check: logical order (logo → nav → theme toggle → URL input → paste button → footer), disabled submit button correctly excluded from tab order until the field has a value.
 
 ## Day 5 — QA, testing & deployment
-- [ ] Deploy `apps/web` to Vercel, `apps/api` to Render
+- [ ] Deploy `apps/web` to Netlify, `apps/api` to Railway — remaining dashboard checks are in [DEPLOYMENT.md](./DEPLOYMENT.md#pre-production-checklist)
+- [x] Automated lint, typecheck, test and build in CI (2026-10-14) — see [TESTING.md](./TESTING.md)
+- [ ] Verify `trust proxy` hop count on Railway ([DEPLOYMENT.md](./DEPLOYMENT.md#trust-proxy))
 - [ ] Custom domain + SSL
 - [ ] End-to-end smoke test of the full [Pre-production readiness checklist](./DEPLOYMENT.md#pre-production-readiness-checklist)
 
 ## Future scaling (not MVP)
-- [ ] If `apps/api` moves to multiple Render instances, replace `express-rate-limit` (in-memory) with a distributed rate limiter (e.g. Upstash Redis, sliding window) — in-memory counters don't sync across instances and the effective limit multiplies with instance count. See [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [SECURITY.md](./SECURITY.md#rate-limiting).
+- [ ] If `apps/api` moves to multiple Railway instances, replace `express-rate-limit` (in-memory) with a distributed rate limiter (e.g. Upstash Redis, sliding window) — in-memory counters don't sync across instances and the effective limit multiplies with instance count. See [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [SECURITY.md](./SECURITY.md#rate-limiting).

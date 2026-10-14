@@ -1,10 +1,9 @@
 import type { InstagramPost, MediaItem } from "@reelsavenow/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
-import { getBrowser } from "./browserManager";
+import { withBrowserContext } from "./browserManager";
 import { extractShortcode } from "./shortcode";
 import {
-  USER_AGENT,
   NAVIGATION_TIMEOUT_MS,
   POST_LOAD_WAIT_MS,
   NOT_FOUND_MARKER,
@@ -41,19 +40,19 @@ const PRIVATE_ACCOUNT_MARKERS = ["This Account is Private", "This account is pri
  * privateContentService.ts (own-private-content, authenticated via session
  * cookie) can reuse the exact same logic against an authenticated page
  * render, rather than duplicating it.
+ *
+ * The browser context comes from withBrowserContext() rather than being
+ * created here: it owns the UA/viewport pair, the concurrency cap that
+ * keeps Chromium from OOM-killing a small container instance, and closing
+ * the context on every exit path.
  */
 export const playwrightTier: IMediaScraper = {
   tierName: "playwright",
 
   async extract(url: string): Promise<InstagramPost> {
-    const browser = await getBrowser();
-    const context = await browser.newContext({
-      userAgent: USER_AGENT,
-      viewport: { width: 1280, height: 900 },
-    });
-    const page = await context.newPage();
+    return withBrowserContext(async (context) => {
+      const page = await context.newPage();
 
-    try {
       // Chromium's video-preload behavior fetches the asset in byte-range
       // chunks (bytestart/byteend query params, not a standard HTTP Range
       // header) rather than one full-file request, so whichever video/mp4
@@ -156,8 +155,6 @@ export const playwrightTier: IMediaScraper = {
         author: { username, full_name: username },
         media,
       };
-    } finally {
-      await context.close();
-    }
+    });
   },
 };

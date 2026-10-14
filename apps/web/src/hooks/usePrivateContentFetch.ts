@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useReducer } from "react";
-import type { AxiosError } from "axios";
-import type { ApiErrorResponse, ApiSuccessResponse, InstagramPost } from "@reelsavenow/types";
+import type { ApiSuccessResponse, InstagramPost } from "@reelsavenow/types";
 import { apiClient } from "@/lib/apiClient";
+import { describeRequestFailure } from "@/lib/apiErrors";
 import { cleanInstagramUrl, isValidInstagramUrl } from "@/lib/validators";
 import { cleanSessionCookie, isPlausibleSessionCookie } from "@/lib/privateContentValidators";
 
@@ -121,38 +121,24 @@ export function usePrivateContentFetch() {
       });
       dispatch({ type: "SUCCESS", post: response.data.data });
     } catch (error) {
-      const axiosError = error as AxiosError<ApiErrorResponse>;
-      const responseData = axiosError.response?.data;
+      const failure = describeRequestFailure(error);
 
-      if (axiosError.response?.status === 429) {
-        dispatch({
-          type: "RATE_LIMITED",
-          message: responseData?.message ?? "Too many requests. Please try again later.",
-        });
+      if (failure.status === 429) {
+        dispatch({ type: "RATE_LIMITED", message: failure.message });
         return;
       }
 
-      if (responseData?.code === "SESSION_EXPIRED") {
-        dispatch({
-          type: "SESSION_EXPIRED",
-          message: responseData.message,
-        });
+      if (failure.code === "SESSION_EXPIRED") {
+        dispatch({ type: "SESSION_EXPIRED", message: failure.message });
         return;
       }
 
-      if (responseData?.code === "ACCESS_DENIED") {
-        dispatch({
-          type: "ACCESS_DENIED",
-          message: responseData.message,
-        });
+      if (failure.code === "ACCESS_DENIED") {
+        dispatch({ type: "ACCESS_DENIED", message: failure.message });
         return;
       }
 
-      dispatch({
-        type: "ERROR",
-        message: responseData?.message ?? "Something went wrong. Please try again.",
-        code: responseData?.code ?? null,
-      });
+      dispatch({ type: "ERROR", message: failure.message, code: failure.code });
     }
   }, []);
 

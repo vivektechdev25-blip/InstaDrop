@@ -3,6 +3,38 @@ import type { InstagramPost, MediaItem } from "@reelsavenow/types";
 import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
 import { extractShortcode } from "./shortcode";
+import { createCircuitBreaker } from "./circuitBreaker";
+
+// Confirmed live 2026-10-14 (2 shortcodes, one real reel and one that
+// doesn't exist, identical result): Instagram now answers the package's
+// anonymous persisted GraphQL query with 401
+// {"message":"Please wait a few minutes before you try again.",
+//  "require_login":true}, after a successful CSRF fetch. It's not
+// content-specific and not fixable without authentication, which this
+// project deliberately doesn't add to the public flow. 2.0.7 is the latest
+// published version, so there's no upgrade either. Each refused attempt
+// still cost ~750ms (two round trips) on every single request before Tier
+// 2 could start.
+//
+// So a definitive refusal opens a breaker instead: Tier 1 is skipped
+// outright for the cooldown, then tried once again - which is also how it
+// recovers on its own if Instagram lifts the wall. The package rethrows
+// axios errors as "Failed instagram request: Request failed with status
+// code NNN", so the status has to be read from that message.
+const TIER1_REFUSAL_PATTERN = /status code (401|403|429)\b/;
+const TIER1_COOLDOWN_MS = 15 * 60 * 1000;
+
+export const tier1CircuitBreaker = createCircuitBreaker({
+  name: "instagram-url-direct",
+  cooldownMs: TIER1_COOLDOWN_MS,
+});
+
+// The package's default is { retries: 5, delay: 1000 }: on a 403/429 it
+// retries five times with doubling delays (31s minimum) and honors
+// Retry-After, however large. That's longer than the frontend's own 30s
+// timeout before Tier 2 has even started. A refusal is an answer, not a
+// transient blip - the breaker above handles it instead of a retry loop.
+const NO_RETRIES = { retries: 0, delay: 0 };
 
 /**
  * Tier 1: fast path via the instagram-url-direct package, which replays
@@ -14,8 +46,21 @@ import { extractShortcode } from "./shortcode";
 export const instagramUrlDirectTier: IMediaScraper = {
   tierName: "instagram-url-direct",
 
+  isAvailable: () => !tier1CircuitBreaker.isOpen(),
+
   async extract(url: string): Promise<InstagramPost> {
-    const result = await instagramGetUrl(url);
+    let result: Awaited<ReturnType<typeof instagramGetUrl>>;
+    try {
+      result = await instagramGetUrl(url, NO_RETRIES);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (TIER1_REFUSAL_PATTERN.test(message)) {
+        tier1CircuitBreaker.trip(message);
+      }
+      // Always a plain Error, never an AppError: scraperService treats an
+      // AppError as a definitive answer and would skip the Tier 2 fallback.
+      throw error instanceof Error ? error : new Error(message);
+    }
 
     if (result.post_info?.is_private) {
       throw new AppError(

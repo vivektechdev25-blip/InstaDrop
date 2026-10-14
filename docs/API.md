@@ -52,7 +52,16 @@ Media extraction from a public Instagram URL.
 }
 ```
 
-**Rate limited (429)** — 10 requests / 10 minutes / IP, enforced via `express-rate-limit` (in-memory).
+**Rate limited (429)**: 10 requests / 10 minutes / IP, enforced via `express-rate-limit` (in-memory).
+
+**Busy (503)**: this applies to `/fetch` and `/private/fetch` alike. Both share one Chromium pool capped at 2 active browser contexts with 8 more requests queued. Beyond that, the API answers immediately with `"We're handling too many requests right now. Please try again in a moment."`, code `SERVER_ERROR`, rather than queueing work that would outlive the frontend's 30s timeout.
+
+**Extraction tiers**: Tier 1 (`instagram-url-direct`) is currently refused by Instagram (401). After the first refusal a circuit breaker skips it for 15 minutes, so in practice every extraction is served by Tier 2 (a real browser render, ~3.5–5 s warm). See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+
+## Errors common to every endpoint
+
+- **Malformed JSON body (400) / oversized body (413):** the standard envelope with `code: "INVALID_URL"` (the existing invalid-request code) and a static message. The raw body is never echoed back or logged. Before 2026-10-14 these were 500s, and the logs contained the raw body.
+- **Unexpected failures (500):** `"Something went wrong. Please try again."`, code `SERVER_ERROR`. No stack trace or internal detail reaches the client.
 
 ## `POST /api/v1/private/fetch`
 
@@ -103,7 +112,13 @@ Binary streaming, proxies the media file straight to the browser.
 
 Sets `Content-Disposition: attachment` to force download instead of inline playback. Media is streamed directly from the upstream CDN response to the client response — never written to disk or buffered fully in memory on the server.
 
-**Security:** `url` is restricted to `*.cdninstagram.com` / `*.fbcdn.net` hostnames (enforced in `downloadMediaSchema.ts`) — without this, the endpoint would be an open proxy for arbitrary URLs (SSRF risk). A non-Instagram-CDN URL returns `400 INVALID_URL`.
+**Security:** `url` must be **https** on a `*.cdninstagram.com` / `*.fbcdn.net` host. This is enforced twice, by one shared allowlist (`apps/api/src/constants/allowedCdnHosts.ts`): once by `downloadMediaSchema.ts` on the caller-supplied URL before any request is made, and again per redirect hop in `downloadService.ts`, which requests with `redirect: "manual"` so a validated URL can't 302 off the allowlist (max 5 hops). Without this the endpoint would be an open proxy for arbitrary URLs (SSRF risk). A non-Instagram-CDN URL returns `400 INVALID_URL`.
+
+**Timeouts:** 15s to receive response headers; the body stream is deliberately uncapped, since a real reel is tens of megabytes. A client that disconnects mid-download tears the upstream stream down with it.
+
+**Rate limited (429)** — 60 requests / 10 minutes / IP, its own `express-rate-limit` instance, independent of `/fetch`'s 10/10min budget. Before 2026-10-14 both endpoints shared one counter, so a fetch plus the slides of a carousel could trip the limit partway through a user's own download. Confirmed live via each endpoint's own `RateLimit-Policy` header.
+
+**Error responses are JSON envelopes, not media.** A client that saves the response body without checking `response.ok` writes that envelope to disk as a `.mp4`/`.jpg` — which is exactly the bug fixed in `PreviewCard.tsx` on 2026-10-14.
 
 ## Frontend state machine
 

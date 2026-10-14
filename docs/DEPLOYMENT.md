@@ -2,120 +2,104 @@
 
 ## Environments
 
-| App | Host | Notes |
+| App | Host | How it builds |
 |---|---|---|
-| `apps/web` | Vercel | Hobby tier for MVP, Pro at scale |
-| `apps/api` | Render | Dockerized (`apps/api/Dockerfile`), declared in `render.yaml`. Starter instance for MVP — see the Chromium memory note below |
-| Postgres | Supabase | Free tier for MVP — **not currently required to deploy**, see below |
+| `apps/web` | **Netlify** | pnpm workspace build from the repo root, Next.js via Netlify's OpenNext adapter |
+| `apps/api` | **Railway** | Docker (`apps/api/Dockerfile`), declared in `railway.json` |
+| Postgres (Supabase) | — | **Not used.** Request logging is scaffolded but not wired in; see [DATABASE.md](./DATABASE.md) |
 
-Switched from Railway to Render on 2026-08-18. Nothing in the code was Railway-specific; both are Docker-based container hosts and the same `apps/api/Dockerfile` deploys unchanged to either.
+History: the docs previously described Vercel (frontend) and Render (API, switched from Railway on 2026-08-18). The confirmed setup as of 2026-10-14 is Netlify + Railway. `render.yaml` is still in the repo but **unused** — kept only because removing deploy config is the owner's call, and recommended for removal. Nothing in the code is host-specific: the same Dockerfile runs on any container host.
 
-## The API must run as a Docker service, not a Node service
+## Frontend — Netlify
 
-Non-negotiable, and the single easiest thing to get wrong: Render's dashboard defaults a new service to the **Node** runtime, which is wrong for this API in two separate ways.
+### Settings
 
-1. It builds the whole monorepo (`pnpm -r build`, including `apps/web`), then runs `pnpm run start` at the repo root — where **no `start` script exists**. The deploy fails with `ERR_PNPM_NO_SCRIPT_OR_SERVER`.
-2. More fundamentally, the Node runtime has no Chromium and no root access to install its system libraries. Playwright — the entire Tier 2 scraper — cannot run there. A service that boots this way is still broken: Tier 1 answers some requests, and everything that needs a real browser fails.
+Verified against Netlify's own docs on 2026-10-14 ([monorepos](https://docs.netlify.com/build/configure-builds/monorepos/), [dependencies](https://docs.netlify.com/configure-builds/manage-dependencies/), [Next.js](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/)). There is **no committed `netlify.toml`** — the live site runs on dashboard settings, and a committed file would override them on the next deploy. A reviewed proposal lives at [`docs/deploy/netlify.toml.proposed`](./deploy/netlify.toml.proposed).
 
-`render.yaml` at the repo root exists to remove this choice from the deploy flow. Deploy via **New → Blueprint**, not New → Web Service, and Render reads the runtime, Dockerfile path, build context, health check, and instance type from it.
-
-If configuring by hand anyway, the settings are: runtime `Docker`, Dockerfile path `apps/api/Dockerfile`, Docker build context `.` (repo root — see the build-context note further down), Root Directory empty.
-
-## Environment variables
-
-Every env var the code actually reads, audited live against both `.env.example` files (2026-08-04) — not assumed from the file alone:
-
-**`apps/api`** (reads `process.env.PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`):
-| Var | Required to deploy? | Notes |
+| Setting | Value | Why |
 |---|---|---|
-| `PORT` | No | Render sets this automatically; the app reads it and falls back to `4000`. The server binds explicitly to `0.0.0.0` — a process bound only to loopback is unreachable from outside the container, and the failure mode is a health check that never passes while the logs look healthy. |
-| `CORS_ORIGIN` | **Yes, for production** | `app.ts` defaults to `http://localhost:3000` if unset — safe for nothing-leaks-open, but it means the real deployed frontend won't be able to call the API until this is set to its actual production URL. See [SECURITY.md](./SECURITY.md#cors) — this was found to be a real bug (documented but silently unused) and fixed while preparing this checklist. **Accepts a comma-separated list**, since one frontend legitimately has several origins (`*.vercel.app` plus a custom domain): `https://reelsavenow.vercel.app,https://reelsavenow.com`. Confirmed live that each listed origin is echoed back and an unlisted one is rejected. |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No, not yet** | `requestLogRepository.ts` (the only file that reads these) is not imported anywhere in the running app yet — request logging is scaffolded but not wired into the live request path. The API deploys and functions fully without these set. Needed once request logging actually ships. |
+| Base directory | *(empty — repo root)* | Netlify runs `pnpm install` when the base directory contains `pnpm-lock.yaml`; it's at the root, and a workspace install from the root is what resolves `@reelsavenow/types`. |
+| Package directory | `apps/web` | Netlify's monorepo setting for "where the site lives"; UI-only. |
+| Build command | `pnpm --filter @reelsavenow/web... build` | The trailing `...` builds `packages/types` first. Verified locally from the repo root. |
+| Publish directory | *(handled by the Next.js adapter)* | Netlify applies `@netlify/plugin-nextjs` automatically for Next.js ≥ 13.5 and recommends not pinning it. |
+| Node version | `NODE_VERSION=20` | Matches `engines`, CI and the Docker image's target. |
+| pnpm version | from `packageManager` (`pnpm@9.0.0`) | Read by Corepack; nothing to set. |
 
-**`apps/web`** (reads `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL`):
-| Var | Required to deploy? | Notes |
+**Lockfiles:** pnpm is the only package manager. The root `package-lock.json` was removed on 2026-10-14 after confirming no deployment could depend on it: it listed zero dependencies, `npm install` from it installed nothing, and npm can't install `apps/web` at all (`EUNSUPPORTEDPROTOCOL workspace:*`). Netlify's docs don't define precedence when both lockfiles exist, so its presence was pure ambiguity.
+
+### Environment variables (build time)
+
+`NEXT_PUBLIC_*` values are **inlined into the client JavaScript at build time** (verified: the value appears in `.next/static` chunks). They must be set in Netlify's environment before the build, and changing one needs a redeploy. Never put a secret in a `NEXT_PUBLIC_*` variable — nothing else is read by the frontend.
+
+| Var | Value | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | **Yes** | Must point at the deployed `apps/api` URL + `/api/v1`. Only known after the backend is deployed — see the ordering note below. |
-| `NEXT_PUBLIC_SITE_URL` | Yes | Drives canonical URLs, sitemap, OG tags ([SEO.md](./SEO.md)). Set to the real production frontend domain once known. |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://<railway-api-domain>/api/v1` | Where the browser sends `/fetch`, `/private/fetch` and `/download`. |
+| `NEXT_PUBLIC_SITE_URL` | `https://<netlify-production-domain>` (or the custom domain) | Canonical URLs, sitemap, OG tags. |
+| `PNPM_FLAGS` | `--shamefully-hoist` — **only if** the build fails with module-resolution errors | Documented by Netlify for Next.js + pnpm; not needed by the local build. |
 
-**No secrets committed:** confirmed live 2026-08-04 — `git log --all` searched for any committed `.env` file or `.env`-pattern content; none found ([CHANGELOG.md](./CHANGELOG.md)).
+**Deploy previews** are built with the same `NEXT_PUBLIC_API_BASE_URL` but are **not** in the API's CORS allowlist, by design — previews can't call the production API. If previews need a working backend, give them their own API (and their own `CORS_ORIGIN`), rather than widening production CORS to `*.netlify.app`.
 
-Never commit real `.env` files — they are gitignored.
+## API — Railway
 
-## Deployment order (breaks a circular dependency)
+### Settings
 
-`CORS_ORIGIN` (backend) needs the frontend's URL; `NEXT_PUBLIC_API_BASE_URL` (frontend) needs the backend's URL. Neither is known until the other is deployed at least once:
+From `railway.json`: builder `DOCKERFILE`, `dockerfilePath: apps/api/Dockerfile`, health check `/health` (300s timeout), restart `ON_FAILURE` ×3. The start command is the image's `CMD` (`node dist/server.js`) — `railway.json` doesn't override it.
 
-1. Deploy `apps/api` to Render first (Render assigns a `*.onrender.com` URL immediately on first deploy, before any custom domain).
-2. Deploy `apps/web` to Vercel with `NEXT_PUBLIC_API_BASE_URL` set to that Render URL + `/api/v1`.
-3. Go back to the Render service and set `CORS_ORIGIN` to the Vercel URL Vercel just assigned (`*.vercel.app`, or the custom domain if one's attached), then redeploy/restart the API service so the new env var takes effect.
-4. If a custom domain is added later to either service, repeat step 3 with the new domain.
+Check in the Railway dashboard:
+- **Root directory: empty (repo root).** The Dockerfile's `deps` stage copies `packages/types` and root `config/`; a narrower build context fails with `path does not exist: tsconfig.json` (a bug already hit and fixed locally — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)).
+- No custom start command overriding `CMD`. If one was set before 2026-10-14 it may still say `node dist/app.js`, which no longer starts the server — the entry point moved to `dist/server.js` (`app.ts` now only builds the Express app, so it can be tested in-process).
 
-## Platform setup (dashboard settings, since this monorepo needs a couple of non-default values)
+### Environment variables (runtime)
 
-**Vercel project settings for `apps/web`:**
-- Root Directory: `apps/web`
-- Framework Preset: Next.js (auto-detected)
-- Build/Install commands: Vercel's default pnpm-workspace detection should work once Root Directory is set; override only if the initial deploy fails.
-- Environment variables: `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_SITE_URL` (see table above).
+| Var | Required? | Notes |
+|---|---|---|
+| `PORT` | Set by Railway | Validated at startup (integer 1–65535) — a malformed value used to become `NaN`, which Node treats as "any free port". Defaults to `4000`. The server binds `0.0.0.0`; a loopback-only bind is unreachable from outside the container. |
+| `CORS_ORIGIN` | **Yes** | Comma-separated **exact** origins, e.g. `https://<netlify-production-domain>,https://<custom-domain>`. Validated at startup: a trailing slash, path, mixed-case host or `*` fails the boot with the exact value to use, instead of silently never matching the browser's `Origin` header. Unset → `http://localhost:3000` (fails safe, never a wildcard). |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No** | Only read by `requestLogRepository.ts`, which nothing imports. Don't set them. |
 
-**Render service settings for `apps/api`:** all of these come from `render.yaml` automatically when deploying via **New → Blueprint**. Listed here for reference, and for anyone configuring the service by hand:
-- Runtime: **Docker** (not Node — see the section near the top of this doc for why that choice is load-bearing, not cosmetic).
-- Dockerfile path: `apps/api/Dockerfile`
-- Build context: **repo root** (`.`), not `apps/api/` — the Dockerfile's `deps` stage copies `packages/types` and root `config/` (needed for `packages/types`' own build step, see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)). Getting this wrong reproduces bugs already found and fixed locally.
-- Root Directory: **empty**. Setting it to `apps/api` also narrows the build context and reintroduces the failure above.
-- Health check path: `/health` — a dependency-free endpoint that touches no browser and no network, so it still answers instantly while a scrape is occupying the worker.
-- Port: injected by Render via `PORT` and read by `app.ts`; the server binds to `0.0.0.0` so it's reachable from outside the container.
-- Environment variables: `CORS_ORIGIN` at minimum (see table above; step 3 in the ordering above for its actual value).
+### Chromium in the container
 
-**Instance sizing — Chromium is the constraint.** The API launches a real headless browser per request context, on top of Node. Render's free instance boots the API fine but tends to get Chromium OOM-killed mid-scrape, and free instances sleep after ~15 minutes idle, turning the next request into a roughly one-minute cold start. `render.yaml` therefore declares `plan: starter`; drop it to `free` only to prove the build works, then move back up before sharing the URL with anyone. If the service restarts on its own under real use, that's the memory ceiling — go up one tier.
+- Base image `mcr.microsoft.com/playwright:v1.62.1-jammy` ships Chromium and its OS libraries. Its tag **must** match the `playwright` version pinned in `apps/api/package.json`, or the browser binary won't match what the npm package expects.
+- Launch flags `--disable-dev-shm-usage` (containers mount `/dev/shm` at 64MB, which Chromium exhausts on an image-heavy page) and `--no-sandbox` (the image runs as root). The `--no-sandbox` justification depends on only ever navigating to Instagram — see the URL-validation tests.
+- **Concurrency cap:** at most 2 browser contexts at once, 8 queued, `503` beyond (`browserManager.ts`). The browser un-caches itself when it dies, so an OOM-killed Chromium no longer leaves a healthy-looking but permanently broken service.
+- **Memory:** see the measured figure in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) (container run, 2026-10-14) before choosing a Railway plan. If the service restarts under real use, that's the memory ceiling.
 
-**Container-safe Chromium flags.** `browserManager.ts` launches with `--disable-dev-shm-usage` and `--no-sandbox`. Both exist specifically for containerized hosting: container runtimes mount `/dev/shm` at 64MB, which Chromium exhausts partway through a real image-heavy Instagram page, and the image runs as root, under which Chromium's setuid sandbox refuses to start. They're applied unconditionally rather than gated on an env check — conditionally-applied launch flags are exactly the kind of thing that works locally and fails only in production.
+### `trust proxy`
 
-## Building the API image locally
+`app.set("trust proxy", 1)` trusts exactly one proxy hop — correct on Render (confirmed live then). **Not yet verified on Railway.** It decides which IP the rate limiter counts: too few hops and every client shares the proxy's IP (one user can rate-limit everyone); too many and a client can spoof `X-Forwarded-For`. To verify after deploy: hit `/api/v1/fetch` from two different networks and confirm each gets its own `RateLimit-Remaining` count.
+
+## Deployment order
+
+`CORS_ORIGIN` (API) needs the frontend's origin; `NEXT_PUBLIC_API_BASE_URL` (frontend) needs the API's URL.
+
+1. Deploy the API to Railway and note its public domain.
+2. Set `NEXT_PUBLIC_API_BASE_URL` on Netlify to `https://<railway-api-domain>/api/v1` and deploy the frontend.
+3. Set `CORS_ORIGIN` on Railway to the Netlify production origin (plus any custom domain) and redeploy the API.
+4. Adding a custom domain later means repeating step 3 — and, for the frontend's own domain, updating `NEXT_PUBLIC_SITE_URL` and redeploying.
+
+## Building and checking locally
 
 ```bash
-docker build -f apps/api/Dockerfile -t reelsavenow-api:test .
-docker run --rm -p 4000:4000 reelsavenow-api:test
+corepack pnpm install --frozen-lockfile
+corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build
+
+docker build -f apps/api/Dockerfile -t reelsavenow-api .
+docker run --rm -p 4000:4000 -e CORS_ORIGIN=http://localhost:3000 reelsavenow-api
+curl -s localhost:4000/health
 ```
 
-Build context must be the repo root (not `apps/api/`) — the Dockerfile copies `packages/types` and root `config/` into its `deps` stage. Confirmed working locally 2026-08-04, including a real request through the running container (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the bugs that surfaced getting here).
+The build context must be the repo root. CI (`.github/workflows/ci.yml`) runs all of the above except `docker run`.
 
-## What's blocking an actual deploy right now
+## Pre-production checklist
 
-Nothing in the code. As of 2026-08-18 the repo is pushed to GitHub, `render.yaml` declares the API service, and the container-hosting fixes below are in place and verified locally.
+- [ ] Railway: root directory empty, no start-command override, `CORS_ORIGIN` set to the exact Netlify origin(s)
+- [ ] Netlify: base directory empty, package directory `apps/web`, build command as above, `NODE_VERSION=20`, both `NEXT_PUBLIC_*` vars set
+- [ ] After deploy: `/health` returns `{"status":"ok"}`; the frontend can fetch a real post (CORS + API URL agree)
+- [ ] After deploy: `trust proxy` verified (see above)
+- [x] Rate limiting: three independent budgets, covered by automated tests
+- [x] No secrets committed; no secret in any `NEXT_PUBLIC_*` variable
+- [x] Session-cookie handling audited — cookie scoped to one browser context, never logged (redacted even from library errors), never echoed; covered by automated tests
 
-The remaining steps need account access this environment doesn't have — no Vercel CLI, no Render CLI, no auth tokens for either (checked live, not assumed) — so they're done through the two dashboards by hand, in the order given above.
+## Costs
 
-### Deployment-readiness fixes applied 2026-08-18
-
-Found by auditing the code specifically for container-hosting failure modes, and each verified against a real running build rather than reasoned about:
-
-| Fix | Why it would have broken in production |
-|---|---|
-| Chromium `--disable-dev-shm-usage` / `--no-sandbox` | Default 64MB `/dev/shm` and root-user sandbox refusal both crash Chromium **only** inside a container — local dev never reproduces either. Verified a real Instagram reel still scrapes end-to-end with the flags applied. |
-| `/health` endpoint | No route answered a bare `GET`, so there was nothing for a platform health check to poll and no safe URL to open in a browser to confirm a deploy worked. |
-| Explicit `0.0.0.0` bind | A process bound only to loopback is unreachable from outside its container; the failure mode is a health check that never passes while the logs look perfectly healthy. |
-| Comma-separated `CORS_ORIGIN` | A deployed frontend has at least two legitimate origins (`*.vercel.app` and a custom domain). Single-value parsing forced a redeploy to switch between them. Verified live: each listed origin is echoed back, an unlisted one is rejected. |
-| `render.yaml` | Removes the Node-vs-Docker runtime choice from the deploy flow entirely — the mistake that produces `ERR_PNPM_NO_SCRIPT_OR_SERVER` and, worse, a Chromium-less API. |
-
-## Pre-production readiness checklist
-
-- [ ] All environment variables populated on Vercel & Render — see the tables above for exactly which ones matter
-- [ ] CORS domains locked strictly to production domain — code fixed and verified locally (see [SECURITY.md](./SECURITY.md#cors)); setting the real production value is the last step in the deployment order above
-- [x] Rate limiting verified active via load testing — confirmed live locally (12 rapid requests, first 10 pass, 11+ get `429`), see [TESTING.md](./TESTING.md). Re-verify once more on the deployed URL as part of the post-deploy smoke test.
-- [x] Lighthouse SEO/Performance score audited above 95 — Performance 99, Accessibility 100, Best Practices 100, SEO 100, see [TESTING.md](./TESTING.md#lighthouse-audit-2026-08-04)
-- [ ] Legal static pages (Privacy, Terms, Contact) active — content written and confirmed rendering correctly in a local production build ([TODO.md](./TODO.md)); this item tracks them being live on the deployed domain
-- [ ] Documentation files complete and current
-- [x] No secrets committed to git history — confirmed live, see above
-- [ ] Session-cookie handling audited (if private account feature shipped) — not shipped, not applicable yet
-
-## Cost projections
-
-| Resource | MVP (0–10k MAU) | Scaled (100k+ MAU) |
-|---|---|---|
-| Vercel (frontend) | $0/mo (Hobby) | $20/mo (Pro) |
-| Render (backend) | $5/mo (Starter) | $35/mo (Scaled containers) |
-| Supabase | $0/mo (Free tier) | $25/mo (Pro tier) |
-| Domain | $1/mo | $1/mo |
-| **Total** | **~$6/month** | **~$81/month** |
+The earlier cost table priced Vercel + Render + Supabase and no longer applies. It hasn't been re-derived for Netlify + Railway — check current pricing for both; the main variable is the Railway memory needed for Chromium.

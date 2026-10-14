@@ -10,9 +10,54 @@ Every feature must be manually tested before being considered done. Explicitly c
 - Invalid URLs
 - Private account responses (`PRIVATE_ACCOUNT`)
 
-## Status
+## Automated suite (added 2026-10-14)
 
-No automated test suite exists yet — everything so far has been verified through live manual/scripted testing against the real running app (curl against the API, Playwright-driven browser checks against the dev/production builds, real Docker builds), not just typechecking. See [CHANGELOG.md](./CHANGELOG.md) for what's been confirmed this way feature by feature.
+Vitest in all three packages, run from the repo root. Every suite is **hermetic**: Playwright, `fetch`, Instagram and the CDN are stubbed, so CI never depends on a third party being up (or on Instagram's current markup).
+
+| Command | What it runs |
+|---|---|
+| `pnpm lint` | ESLint 8.57 everywhere (`next/core-web-vitals` for web; `@typescript-eslint/recommended` for api and types). ESLint 8, not 9: `eslint-config-next@14` doesn't support 9. |
+| `pnpm typecheck` | `tsc --noEmit` per package, **including test files** (`tsconfig.typecheck.json` in api/types). |
+| `pnpm test` | All Vitest suites. |
+| `pnpm build` | `packages/types` → `apps/api` → `apps/web`, in dependency order. |
+
+All four run in CI (`.github/workflows/ci.yml`, Node 20, frozen lockfile), plus a Docker build of the API image.
+
+| Suite | Covers |
+|---|---|
+| `packages/types/test/dto.test.ts` | Compile-time DTO contract: `ApiResponse` narrowing on `success`, the exact error-code union both apps branch on. Enforced by `pnpm typecheck`. |
+| `apps/api/test/mediaExtractionHelpers.test.ts` | `parseOgDescription` (incl. the captionless-post regression), `normalizeDateText`/`extractCoverDate`/`matchesCoverDate` (zero-padding regression), `extractMediaAssetId`, `stripByteRangeParams`. |
+| `apps/api/test/validators.test.ts` | Instagram URL validation edge cases, including the invariant that any accepted URL navigates only to Instagram's host; CDN allowlist edge cases (http, apex, lookalikes, trailing dot, IDN, `file:`/`data:`/`javascript:`); a test that fails if the validator and `downloadService` stop sharing one allowlist; session-cookie shape and no-echo. |
+| `apps/api/test/env.test.ts` | `PORT`/`CORS_ORIGIN` parsing — every value that used to be accepted and then silently never work. |
+| `apps/api/test/browserManager.test.ts` | Crash recovery (disconnect, failed launch, stale disconnect, idempotent close) and the context cap (2 active / 8 queued / 503, cleanup on every path, no deadlock, both flows forced through `withBrowserContext`). |
+| `apps/api/test/downloadService.test.ts` | Per-hop redirect validation, hop ceiling and loops, malformed `Location`, header-phase timeout (fake timers) vs. a long body that must not be cut off, client-disconnect cancellation, upstream stream errors, `Content-Disposition`/`Content-Length` handling. |
+| `apps/api/test/app.test.ts` | Through `createApp()` with supertest: the three independent rate-limit budgets and their headers, error envelopes (incl. malformed JSON → 400 with the raw body never logged), 413, 404, helmet headers, CORS allow/deny. |
+| `apps/api/test/privateContentService.test.ts` | Ownership gate against HTML fixtures (match, mismatch, unknown owner, unknown viewer, login redirect, deleted post) — the service's real in-page detection scripts run in jsdom. Cookie scoping, and redaction from logs even when a library error contains it. No real session is used. |
+| `apps/api/test/scraperTiers.test.ts` | Tier cascade semantics, the Tier 1 circuit breaker (trip on 401/403/429, skip, recover after 15 min, log once), no package-level retries, single-video posts still routed to Tier 2. |
+| `apps/api/test/shutdown.test.ts` | Graceful shutdown order, and that a hung browser close or open keep-alive connections still exit. |
+| `apps/web/src/components/downloader/PreviewCard.test.tsx` | Download success/filenames, HTTP-error envelopes never saved as media, non-JSON error pages, transport-failure fallback, double-click protection, carousel slide naming. |
+| `apps/web/src/components/downloader/InputForm.test.tsx` | Validation, URL cleaning, rate-limit and timeout messaging, one toast per failed attempt (regression), in-flight submit guard, auto-submit of an initial URL. |
+| `apps/web/src/lib/lib.test.ts` | Request-failure classification, URL cleaning (incl. the non-Instagram-host regression), catch-all/query entry points, download URL builders. |
+
+**Mutation-checked, not just green.** For every fix with a regression test, the fix was temporarily reverted and the suite confirmed to fail, then restored. One honest exception: PreviewCard's in-handler double-click guard can't be observed through the DOM — React re-renders between two discrete clicks, so the `disabled` attribute is what actually blocks the second click (and *that* is caught when removed). The handler guard is defense in depth.
+
+**Not covered by the automated suite** (still manual/live — see the sections below): real Instagram markup, real Chromium rendering, real CDN media (audio track present), Railway/Netlify behavior.
+
+### Opt-in live checks
+
+Not part of `pnpm test`, by design. With the API running locally (`pnpm dev:api`):
+
+```bash
+curl -s localhost:4000/health
+curl -s -X POST localhost:4000/api/v1/fetch -H 'Content-Type: application/json' \
+  -d '{"url":"https://www.instagram.com/reel/<shortcode>/"}'
+```
+
+For a reel, download the returned URL through `/api/v1/download` and confirm the file contains both an `avc1` (video) and `mp4a` (audio) track — an HTTP 200 alone has never been enough in this project's history. Keep live checks to a handful of requests: Instagram throttles anonymous traffic (see the Tier 1 entry in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)).
+
+## Earlier manual verification
+
+Before 2026-10-14 everything was verified through live manual/scripted testing against the real running app (curl against the API, Playwright-driven browser checks against dev/production builds, real Docker builds). Those records stay below.
 
 ## Lighthouse audit (2026-08-04)
 

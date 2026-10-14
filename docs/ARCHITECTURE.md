@@ -6,23 +6,25 @@
 User / Browser
       |
       v
-Frontend — Vercel Edge (Next.js 14, TypeScript, Tailwind + shadcn/ui)
+Frontend — Netlify (Next.js 14 via the OpenNext adapter, TypeScript, Tailwind + shadcn/ui)
   |-- URL Input Handler       (regex validation, clipboard paste, param cleanup)
   |-- Preview Card            (video player, carousel swiper)
   |-- Binary Download         (Content-Disposition trigger)
   `-- State Management        (IDLE -> VALIDATING -> FETCHING -> SUCCESS/ERROR/RATE_LIMITED)
       |
       v
-Backend API — Render (Node.js 20 + Express, Docker)
+Backend API — Railway (Express, Docker; the image's Playwright base ships Node 24)
   |-- Scraper Engine          (multi-tier fallback scrapers)
-  |-- Rate Limiter            (express-rate-limit, in-memory, single instance)
+  |-- Browser Pool            (one shared Chromium, max 2 contexts + 8 queued)
+  |-- Rate Limiter            (express-rate-limit, in-memory, 3 independent budgets)
   |-- Security Layer          (Helmet, Zod validation, CORS)
-  `-- API Routes              (/api/v1/fetch, /api/v1/download)
+  `-- API Routes              (/api/v1/fetch, /api/v1/download, /api/v1/private/fetch)
       |
       v
 Data & Infra Layer
-  |-- Supabase PostgreSQL     (request_logs — no PII, hashed IPs only)
-  `-- Vercel Edge Cache       (s-maxage=3600, stale-while-revalidate=59)
+  `-- (none in use)           Supabase request logging is scaffolded but not wired in;
+                              no edge caching is configured (an earlier s-maxage plan
+                              was never implemented)
       |
       v
 Instagram CDN (external — scraped via proxy, media never stored on our servers)
@@ -82,20 +84,20 @@ siteConfig.ts
 ### Frontend
 - Next.js 14+ (App Router, Server Actions), TypeScript strict mode
 - Tailwind CSS + shadcn/ui (Radix primitives), Framer Motion
-- TanStack React Query v5 + Axios
+- Axios (TanStack React Query was listed here but never used; removed 2026-10-14)
 
 ### Backend
 - Node.js 20 LTS + Express.js (TypeScript)
 - `express-rate-limit` (in-memory) for rate limiting
 - Supabase PostgreSQL for audit/anonymous request logs only
-- Hosting: Vercel (frontend) + Render (backend API, Dockerized)
+- Hosting: Netlify (frontend) + Railway (backend API, Dockerized) — see [DEPLOYMENT.md](./DEPLOYMENT.md)
 - PNPM monorepo workspace
 
 ### Rate limiting: in-memory for MVP
 
-`express-rate-limit` runs in-memory, per Render instance, enforcing 10 requests / 10 minutes / IP. This is intentional for the MVP: the backend deploys as a single Render instance, so there is no cross-instance state to synchronize, and it avoids the cost/operational overhead of a Redis dependency (previously Upstash) before it's needed.
+`express-rate-limit` runs in-memory, per API instance. Three separate instances of it guard three endpoints with three independent budgets — extraction (`/fetch`, 10/10min), media streaming (`/download`, 60/10min) and the own-private-content flow (`/private/fetch`, 3/10min). See [SECURITY.md](./SECURITY.md#rate-limiting) for each number's reasoning; the short version is that a browser render and a file stream are different costs and shouldn't share one counter. In-memory is intentional for the MVP: the backend deploys as a single Render instance, so there is no cross-instance state to synchronize, and it avoids the cost/operational overhead of a Redis dependency (previously Upstash) before it's needed.
 
-**Revisit at scale:** if `apps/api` ever scales to multiple Render instances, in-memory counters no longer share state across instances and the limit becomes effectively `N × 10 req / 10 min / IP`. At that point, switch back to a distributed store (e.g. Upstash Redis with a sliding-window algorithm) so the limit holds across instances. Tracked in [TODO.md](./TODO.md).
+**Revisit at scale:** if `apps/api` ever scales to multiple instances, in-memory counters no longer share state across instances and the limit becomes effectively `N × 10 req / 10 min / IP`. At that point, switch back to a distributed store (e.g. Upstash Redis with a sliding-window algorithm) so the limit holds across instances. Tracked in [TODO.md](./TODO.md).
 
 ### Scraper tiers: instagram-url-direct (fast), Playwright (fallback)
 
@@ -106,7 +108,14 @@ Decision made 2026-08-04, after live-testing showed every anonymous, session-les
 
 **Explicitly rejected** (per product decision, not a technical dead end): a paid third-party scraping API (breaks the near-zero-cost MVP budget in [DEPLOYMENT.md](./DEPLOYMENT.md#cost-projections) and sends every submitted URL to a third party) and an own-account session-cookie pool (repurposes the private-account-own-content mechanism in [SECURITY.md](./SECURITY.md) to scrape *other people's* public content at scale — a materially different ToS/ban risk the spec never discussed).
 
-**Latency:** the spec's <800ms extraction target ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) applies only to the Tier 1 success path. Tier 2 launches a real browser and waits for the page to render — confirmed live at ~4-5 seconds per request. This is an accepted tradeoff: reliability over raw speed for the fallback path, since Tier 1 alone is not dependable enough to be the only tier.
+**Latency (measured 2026-10-14):** the spec's <800ms target ([PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)) was only ever reachable on a Tier 1 success, and Tier 1 currently has no success path: Instagram refuses its anonymous GraphQL query (401, `require_login: true`). A circuit breaker skips Tier 1 for 15 minutes after a refusal, so extraction is effectively Tier 2 only: ~3.5–5 s per request with a warm browser, ~9–10 s on a cold start. Reels went through Tier 2 regardless, since Tier 1 only has the audio-less DASH video URL. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for the measurements and the investigation.
+
+### Browser lifecycle and concurrency (`browserManager.ts`)
+
+Chromium is shared process-wide and launched lazily, because launching one per request would dominate response time. Two things that implies, both of them learned the hard way rather than designed in up front:
+
+- **A dead browser must un-cache itself.** The cached launch promise is cleared on Chromium's own `disconnected` event, and on a failed launch. Without that, an OOM-killed browser (a documented, expected event on small container instances — see [DEPLOYMENT.md](./DEPLOYMENT.md)) left the Node process alive and healthy-looking while every later scrape failed on the same dead object, with no restart to recover it. Verified live by killing a real browser mid-session and confirming the next request transparently relaunches.
+- **Contexts are capped, not unbounded.** `withBrowserContext()` is the only way either flow (public Tier 2, own-private-content) gets a context: it holds the concurrency cap (2 active, 8 queued, a fast `503` beyond that), applies the shared UA/viewport pair, and closes the context on every exit path. One cap shared by both flows is the point — Chromium, not Node, is this service's memory ceiling, and two flows each opening contexts freely is how a small instance gets OOM-killed. Verified live: peak concurrency held at 2 across 6 parallel requests, and 14 simultaneous requests produced 10 served plus 4 clean 503s.
 
 ## PWA install prompt system
 
