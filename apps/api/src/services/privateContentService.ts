@@ -1,10 +1,9 @@
 import type { BrowserContext, Page } from "playwright";
 import type { InstagramPost, MediaItem } from "@reelsavenow/types";
 import { AppError } from "../errors/AppError";
-import { getBrowser } from "./scrapers/browserManager";
+import { withBrowserContext } from "./scrapers/browserManager";
 import { extractShortcode } from "./scrapers/shortcode";
 import {
-  USER_AGENT,
   NAVIGATION_TIMEOUT_MS,
   POST_LOAD_WAIT_MS,
   NOT_FOUND_MARKER,
@@ -56,29 +55,30 @@ interface ContentOwner {
  * docs/ARCHITECTURE.md.
  */
 async function fetchOwnPrivateContent(sessionCookie: string, url: string): Promise<InstagramPost> {
-  const browser = await getBrowser();
-  const context = await browser.newContext({
-    userAgent: USER_AGENT,
-    viewport: { width: 1280, height: 900 },
-  });
-
   try {
-    // Cookie lives only on this context, which exists only for this one
-    // request - context.close() in the finally block below discards it.
-    // Never written to a variable that outlives this function, a log, a
-    // database, or a cache at any point.
-    await context.addCookies([
-      {
-        name: SESSION_COOKIE_NAME,
-        value: sessionCookie,
-        domain: ".instagram.com",
-        path: "/",
-        httpOnly: true,
-        secure: true,
-      },
-    ]);
+    // withBrowserContext owns the context's whole lifecycle: the shared
+    // UA/viewport, the service-wide Chromium concurrency cap, and closing
+    // the context on every exit path (the `finally` this function used to
+    // do by hand). That closing is what discards the cookie below, so it
+    // matters that it's unconditional, not that it's local.
+    return await withBrowserContext(async (context) => {
+      // Cookie lives only on this context, which exists only for this one
+      // request - the context is closed as soon as this callback returns
+      // or throws, which discards it. Never written to a variable that
+      // outlives this function, a log, a database, or a cache at any point.
+      await context.addCookies([
+        {
+          name: SESSION_COOKIE_NAME,
+          value: sessionCookie,
+          domain: ".instagram.com",
+          path: "/",
+          httpOnly: true,
+          secure: true,
+        },
+      ]);
 
-    return await extractOwnPrivateContent(context, url);
+      return extractOwnPrivateContent(context, url);
+    });
   } catch (error) {
     if (error instanceof AppError) throw error;
 
@@ -101,8 +101,6 @@ async function fetchOwnPrivateContent(sessionCookie: string, url: string): Promi
       "We couldn't process this request right now. Please try again in a moment.",
       502
     );
-  } finally {
-    await context.close();
   }
 }
 

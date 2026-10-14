@@ -13,6 +13,13 @@ import type { Page } from "playwright";
 
 export const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+// Paired with the UA above, not independent of it: the desktop UA +
+// 1280x900 viewport combination is what makes Instagram serve the
+// progressive (audio-inclusive) MP4 this scraper depends on - a mobile UA
+// was tried and regressed audio (see docs/KNOWN_ISSUES.md). Exported so
+// browserManager.withBrowserContext() is the only place that applies them,
+// rather than each flow hardcoding its own copy.
+export const VIEWPORT = { width: 1280, height: 900 } as const;
 export const NAVIGATION_TIMEOUT_MS = 20000;
 export const POST_LOAD_WAIT_MS = 2500;
 export const SLIDE_CLICK_WAIT_MS = 900;
