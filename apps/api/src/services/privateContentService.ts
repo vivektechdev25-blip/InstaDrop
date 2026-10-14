@@ -92,9 +92,13 @@ async function fetchOwnPrivateContent(sessionCookie: string, url: string): Promi
     // session cookie - but the AppError re-throw here means the response
     // sent back to the client never includes error.message at all either
     // way, only this static string.
+    //
+    // Redacted anyway, as defense in depth: "not expected to" is an
+    // assumption about a third-party library's error text, and the cost of
+    // that assumption being wrong once is a live credential in the logs.
     console.error(
       "[privateContentService] unexpected extraction failure:",
-      error instanceof Error ? error.message : "unknown error"
+      error instanceof Error ? redactSecret(error.message, sessionCookie) : "unknown error"
     );
     throw new AppError(
       "SERVER_ERROR",
@@ -102,6 +106,22 @@ async function fetchOwnPrivateContent(sessionCookie: string, url: string): Promi
       502
     );
   }
+}
+
+// Covers both forms the cookie can appear in: as submitted (often still
+// %3A-encoded when copied from DevTools) and decoded.
+function redactSecret(text: string, secret: string): string {
+  let decoded = secret;
+  try {
+    decoded = decodeURIComponent(secret);
+  } catch {
+    // Not valid percent-encoding - the raw form is the only form.
+  }
+
+  return [secret, decoded].reduce(
+    (redacted, form) => (form ? redacted.split(form).join("[redacted]") : redacted),
+    text
+  );
 }
 
 async function extractOwnPrivateContent(
