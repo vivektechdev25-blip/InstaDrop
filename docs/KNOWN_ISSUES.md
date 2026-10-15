@@ -1,5 +1,36 @@
 # Known Issues
 
+## Downloaded reels had no sound in production — fixed 2026-10-15
+
+**Symptom.** Reels downloaded through the live site played video with no audio. The same reel fetched through a locally-run API produced a file with sound.
+
+**Measured, not inferred.** The file the production API returned was parsed box by box: `ftyp`, `moov` (complete, 36KB), `free`, `mdat`, with exactly **one** `hdlr` track of type `vide` and none of type `soun`. One video track, no audio track — not a player or container quirk.
+
+**Cause.** `findProgressiveVideoUrl()` returned `video_versions[0]` and trusted it. That entry is not reliably the muxed rendition:
+
+| Source | path | `vencode_tag` | audio |
+|---|---|---|---|
+| `video_versions` entries (local network) | `/o1/v/t2/f2/m86/` | `xpv_progressive…dash_baseline_1_v1` | 1 video + 1 audio |
+| the entry production received | `/o1/v/t2/f2/m86/` | `xpv_progressive…dash_baseline_1_v1` | 1 video, **0 audio** |
+| network-captured DASH stream | `/o1/v/t2/f2/m367/` | `ig-xpvds…dash_r2evevp9…` | 1 video, 0 audio |
+
+The decisive detail: **the production URL and the audio-bearing local URLs decode to the same asset** (`6147…AB_video_dashinit.mp4`) with the same `type`, same `vencode_tag` and the same `xpv_progressive` family. Nothing in the metadata distinguishes a silent rendition from a muxed one. Which URL carries audio varies by the network the page is fetched from — the production API, reaching Instagram from a datacenter, was handed a silent one. A previous attempt to pick by `type` number (commit `d68e20a`) was reverted for the same reason: the number says nothing about audio.
+
+Also checked and ruled out as alternative sources: the page exposes no `og:video`, and its `<video>` element uses a `blob:` MediaSource URL, so `video_versions` is the only progressive source available.
+
+**Fix.** Choose by what the bytes contain, not by position:
+
+- `findProgressiveVideoUrls()` returns every candidate from every relay blob, deduplicated, instead of only the first.
+- `probeHasAudioTrack()` fetches the first 400KB with a `Range` header and parses the `moov` box for an `hdlr` of type `soun`. Instagram's progressive files are faststart (`moov` measured at ~36KB, before `mdat`), so one short ranged request answers the question without downloading 20MB.
+- `selectVideoUrlWithAudio()` returns the first candidate with a confirmed audio track; failing that the first whose audio could not be determined; then the first candidate; and only then the captured DASH stream, which is known to be video-only. A probe that fails never turns into "silent" — unknown outranks known-bad.
+- When every candidate is confirmed silent, it logs a warning. That state is what shipped silently before, so it should be visible if it recurs.
+
+Cost: one extra ranged request on the happy path, capped at four probes.
+
+**Verified** against the real URLs: the exact URL production served probes `false`, an audio-bearing URL probes `true`, and the selector picks the audio one when offered both. 17 unit tests cover the box parsing and the selection order, built on synthetic MP4 headers so they need no network; each was mutation-checked by reverting the fix and confirming failure.
+
+**Open:** if Instagram offers a datacenter no muxed rendition at all, selection cannot create one — the warning above is what will say so. Remuxing the DASH audio and video streams would need ffmpeg, which this project does not ship.
+
 ## A missing Netlify variable silently published a site that called localhost — fixed 2026-10-15
 
 **Symptom.** After the first successful production deploy of the reliability pass, `reelsavenow.com` loaded correctly, showed the right branding, and had correct canonical/sitemap URLs — but every download failed. The browser was sending requests to `http://localhost:4000/api/v1/fetch`, which fails with `ERR_CONNECTION_REFUSED` on every visitor's machine.

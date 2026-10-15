@@ -8,7 +8,8 @@ import {
   POST_LOAD_WAIT_MS,
   NOT_FOUND_MARKER,
   readPageMeta,
-  findProgressiveVideoUrl,
+  findProgressiveVideoUrls,
+  selectVideoUrlWithAudio,
   stripByteRangeParams,
   findFullResolutionImage,
   extractCoverDate,
@@ -134,10 +135,12 @@ export const playwrightTier: IMediaScraper = {
       // disambiguating which slide a given video response belongs to isn't
       // reliable enough to build on top of - carousels are treated as
       // image-only until that's verified against a real multi-slide post.
-      const progressiveVideoUrl =
-        slideImageUrls.length === 1 ? await findProgressiveVideoUrl(page) : null;
+      // Probes the candidates for a real audio track rather than trusting
+      // the first one - see selectVideoUrlWithAudio().
       const videoUrl =
-        slideImageUrls.length === 1 ? progressiveVideoUrl ?? capturedVideoUrl : null;
+        slideImageUrls.length === 1
+          ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), capturedVideoUrl)
+          : null;
 
       const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
         videoUrl
