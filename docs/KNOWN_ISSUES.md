@@ -6,7 +6,9 @@
 
 **Cause, confirmed rather than inferred.** `NEXT_PUBLIC_*` values are inlined into the client bundle by `next build`, so whatever is present at build time is permanent for that deploy. Both call sites read the variable as `process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"`. When the deploy environment did not provide the variable, the `??` substituted the development fallback and **the build still succeeded**. Verified at the time: the live bundle was the new build (it carried the new branding), contained `localhost:4000`, and contained no Railway URL; nothing in the repository shadowed the variable (no committed `.env`, no `env` block in `next.config.js`), and a local build *with* the variable set inlined it correctly. So the code read the variable properly — it was simply absent at build time, and nothing said so.
 
-Why the variable was absent is a deploy-platform setting (a scope that excludes Builds, a context that covers only Deploy previews, or the variable set on a different Netlify site), and is not visible from the repository.
+**Why it was absent, confirmed 2026-10-15:** the deploy platform had the variable named `NEXT_PUBLIC_API_BASE_UR` - no trailing `L`. The dashboard therefore looked correctly configured, while Next.js, which matches the name character for character, found nothing. A one-character typo in a variable name produced a green build and a site where no download could ever work.
+
+That is why the guard also reports near-miss names: a build missing the variable now prints `A similarly named variable IS set: NEXT_PUBLIC_API_BASE_UR`, instead of an "it is not set" message that contradicts what the dashboard shows. Only variable *names* are reported, never values.
 
 **Fix: make the misconfiguration loud instead of silent.**
 

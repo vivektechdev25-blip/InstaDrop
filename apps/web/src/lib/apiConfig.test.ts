@@ -1,7 +1,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assertProductionApiBaseUrl, describeInvalidApiBaseUrl } from "../../buildEnv.cjs";
+import {
+  assertProductionApiBaseUrl,
+  describeInvalidApiBaseUrl,
+  findLikelyMisspellings,
+} from "../../buildEnv.cjs";
 import { normalizeApiBaseUrl } from "@/lib/apiConfig";
 
 afterEach(() => {
@@ -131,6 +135,54 @@ describe("production build guard (buildEnv.cjs)", () => {
     expect(() => loadConfig("phase-production-build")).not.toThrow();
     expect(() => loadConfig("phase-development-server")).not.toThrow();
     expect(loadConfig("phase-development-server").reactStrictMode).toBe(true);
+  });
+
+  // The real 2026-10-14 cause: the deploy platform had
+  // NEXT_PUBLIC_API_BASE_UR (no trailing L). The dashboard looked correctly
+  // configured, so "it is not set" read as wrong and cost hours.
+  describe("misspelled variable names", () => {
+    it.each([
+      ["NEXT_PUBLIC_API_BASE_UR", "a missing trailing character"],
+      ["NEXT_PUBLIC_API_BASE_URLL", "a doubled character"],
+      ["NEXT_PUBLIC_API_BASE_RUL", "transposed characters"],
+      ["NEXT_PUBLIC_API_URL", "a dropped word"],
+    ])("spots %s (%s)", (key) => {
+      expect(findLikelyMisspellings({ [key]: "https://api.example.com/api/v1" })).toEqual([key]);
+    });
+
+    it("names the near-miss in the error, so the message matches the dashboard", () => {
+      const env = { NEXT_PUBLIC_API_BASE_UR: "https://api.example.com/api/v1" };
+      expect(() => assertProductionApiBaseUrl(undefined, env)).toThrow(
+        /A similarly named variable IS set: NEXT_PUBLIC_API_BASE_UR\b/
+      );
+      expect(() => assertProductionApiBaseUrl(undefined, env)).toThrow(/Rename it to exactly/);
+    });
+
+    it("ignores unrelated variables, and never reports their values", () => {
+      const env = {
+        NEXT_PUBLIC_SITE_URL: "https://reelsavenow.com",
+        SUPABASE_SERVICE_ROLE_KEY: "super-secret-value",
+        PATH: "/usr/bin",
+      };
+      expect(findLikelyMisspellings(env)).toEqual([]);
+
+      const message = (() => {
+        try {
+          assertProductionApiBaseUrl(undefined, env);
+          return "";
+        } catch (error) {
+          return (error as Error).message;
+        }
+      })();
+      expect(message).not.toContain("super-secret-value");
+      expect(message).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    });
+
+    it("says nothing about typos when the correct name is simply absent", () => {
+      expect(() => assertProductionApiBaseUrl(undefined, { PATH: "/usr/bin" })).not.toThrow(
+        /similarly named/
+      );
+    });
   });
 
   it("explains exactly what to set and where", () => {
