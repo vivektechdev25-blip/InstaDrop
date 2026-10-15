@@ -129,3 +129,35 @@ describe("privateContentSchema", () => {
     expect(JSON.stringify(result.error?.flatten())).not.toContain("SECRET");
   });
 });
+
+describe("isAllowedCdnUrl - shapes no real CDN link has", () => {
+  it.each([
+    ["an explicit port", "https://scontent.cdninstagram.com:22/a.mp4"],
+    ["an explicit https port", "https://scontent.cdninstagram.com:8443/a.mp4"],
+    ["embedded credentials", "https://user:pass@scontent.cdninstagram.com/a.mp4"],
+    ["a username only", "https://user@scontent.cdninstagram.com/a.mp4"],
+    ["a lookalike host", "https://scontent.cdninstagram.com.evil.example/a.mp4"],
+    ["a suffix without the dot", "https://evilcdninstagram.com/a.mp4"],
+    ["userinfo hiding the real host", "https://scontent.cdninstagram.com@evil.example/a.mp4"],
+  ])("refuses %s", (_label, url) => {
+    expect(isAllowedCdnUrl(new URL(url))).toBe(false);
+  });
+
+  it("still accepts a real CDN link", () => {
+    expect(isAllowedCdnUrl(new URL("https://scontent-sjc3-1.cdninstagram.com/o1/v/a.mp4?x=1"))).toBe(
+      true
+    );
+  });
+});
+
+describe("downloadMediaSchema - never throws on bad input", () => {
+  it.each(["x", "", "https://", "::::", "%%%"])("rejects %j with a validation error", (url) => {
+    const result = downloadMediaSchema.safeParse({ url, filename: "a" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an absurdly long URL", () => {
+    const url = `https://scontent.cdninstagram.com/${"a".repeat(5000)}`;
+    expect(downloadMediaSchema.safeParse({ url, filename: "a" }).success).toBe(false);
+  });
+});

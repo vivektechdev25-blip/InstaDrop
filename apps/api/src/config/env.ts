@@ -7,6 +7,28 @@ const DEFAULT_CORS_ORIGIN = "http://localhost:3000";
 export interface ServerConfig {
   port: number;
   corsOrigins: string[];
+  /** Undefined keeps app.ts's address-class default. */
+  trustProxy?: number | string[];
+  commit: string | null;
+}
+
+/**
+ * Escape hatch for proxy trust, so a change in Railway's forwarding can be
+ * answered with a variable rather than a deploy. A bare integer is a hop
+ * count; anything else is a comma-separated list of proxy-addr names or
+ * CIDRs ("loopback, 100.64.0.0/10"). Unset keeps the default.
+ */
+export function parseTrustProxy(raw: string | undefined): number | string[] | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  return trimmed.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+/** Railway sets this on GitHub-connected deploys; nothing else needs to. */
+export function parseCommit(raw: string | undefined): string | null {
+  const trimmed = raw?.trim();
+  return trimmed && /^[0-9a-f]{7,40}$/i.test(trimmed) ? trimmed.slice(0, 7) : null;
 }
 
 /**
@@ -75,5 +97,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
   return {
     port: parsePort(env.PORT),
     corsOrigins: parseCorsOrigins(env.CORS_ORIGIN),
+    trustProxy: parseTrustProxy(env.TRUST_PROXY),
+    commit: parseCommit(env.RAILWAY_GIT_COMMIT_SHA),
   };
 }

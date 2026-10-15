@@ -14,7 +14,33 @@ const ALLOWED_CDN_HOSTNAME_PATTERN = /\.(cdninstagram\.com|fbcdn\.net)$/i;
  * schemes `new URL()` happily parses (ftp:, file:, data:, javascript:)
  * are never legitimate media sources - a `file:`/`data:` Location header
  * has an empty hostname and is rejected here either way.
+ *
+ * Two more shapes are refused even on an allowlisted host, because no real
+ * CDN link has them and both widen what a caller can make this server do:
+ * an explicit port (`:22`, `:8443` - turns the proxy into a port prober
+ * against those hosts) and embedded credentials (`user:pass@` - sent on to
+ * the upstream as an Authorization header the caller chose).
  */
 export function isAllowedCdnUrl(url: URL): boolean {
-  return url.protocol === "https:" && ALLOWED_CDN_HOSTNAME_PATTERN.test(url.hostname);
+  return (
+    url.protocol === "https:" &&
+    url.port === "" &&
+    url.username === "" &&
+    url.password === "" &&
+    ALLOWED_CDN_HOSTNAME_PATTERN.test(url.hostname)
+  );
+}
+
+/**
+ * The same check for an untrusted string. `new URL()` throws on input it
+ * cannot parse, and a throw inside a Zod refinement escapes as a plain
+ * TypeError rather than a validation failure - which is how `?url=x` used
+ * to answer 500 and log a stack trace instead of answering 400.
+ */
+export function isAllowedCdnUrlString(value: string): boolean {
+  try {
+    return isAllowedCdnUrl(new URL(value));
+  } catch {
+    return false;
+  }
 }

@@ -2,7 +2,7 @@ import { Writable } from "node:stream";
 import type { Response as ExpressResponse } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../src/errors/AppError";
-import { downloadService } from "../src/services/downloadService";
+import { downloadService, getActiveDownloadCount } from "../src/services/downloadService";
 
 const CDN = "https://scontent.cdninstagram.com";
 
@@ -193,6 +193,8 @@ describe("streamToResponse - timeouts and stream lifecycle", () => {
 
   // The cap is on the header phase only: a real reel is tens of MB and
   // legitimately streams for longer than 15s.
+  // The header timeout stops at the first byte: a transfer that keeps
+  // moving is never cut off, however long it runs in total.
   it("does not abort a body that keeps streaming past 15s", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let signal: AbortSignal | undefined;
@@ -213,13 +215,40 @@ describe("streamToResponse - timeouts and stream lifecycle", () => {
     const res = createFakeResponse();
 
     const pending = downloadService.streamToResponse(`${CDN}/a.mp4`, "a.mp4", asExpress(res));
-    await vi.advanceTimersByTimeAsync(60000);
+    // Sixty seconds in total, a chunk every ten - slow, but moving.
+    for (let second = 10; second <= 60; second += 10) {
+      await vi.advanceTimersByTimeAsync(10_000);
+      controller.enqueue(new TextEncoder().encode("."));
+    }
     expect(signal?.aborted).toBe(false);
 
     controller.enqueue(new TextEncoder().encode("last"));
     controller.close();
     await pending;
-    expect(res.received()).toBe("first-last");
+    expect(res.received()).toBe("first-......last");
+  });
+
+  // ...but one that sends headers and then goes silent no longer holds the
+  // transfer, and its concurrency slot, open forever.
+  it("fails a transfer whose upstream stalls mid-body", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("first-"));
+      },
+    });
+    stubFetch({ [`${CDN}/a.mp4`]: () => media(body) });
+    const res = createFakeResponse();
+
+    const pending = downloadService.streamToResponse(`${CDN}/a.mp4`, "a.mp4", asExpress(res));
+    const settled = pending.then(
+      () => "resolved",
+      (error: Error) => error.message
+    );
+    await vi.advanceTimersByTimeAsync(31_000);
+
+    await expect(settled).resolves.toBe("upstream stalled mid-transfer");
+    expect(getActiveDownloadCount()).toBe(0);
   });
 
   it("cancels the upstream stream when the client disconnects", async () => {
@@ -263,5 +292,78 @@ describe("streamToResponse - timeouts and stream lifecycle", () => {
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AppError);
     expect((failure as AppError).message).not.toContain("fetch failed");
+  });
+});
+
+describe("streamToResponse - what it agrees to relay", () => {
+  it.each([
+    ["an HTML page", "text/html; charset=utf-8"],
+    ["a JSON document", "application/json"],
+    ["no content-type at all", ""],
+  ])("refuses %s even from an allowlisted host", async (_label, contentType) => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    stubFetch({
+      [`${CDN}/a.mp4`]: () =>
+        new Response(body, { status: 200, headers: contentType ? { "content-type": contentType } : {} }),
+    });
+    const res = createFakeResponse();
+
+    await expect(
+      downloadService.streamToResponse(`${CDN}/a.mp4`, "a.mp4", asExpress(res))
+    ).rejects.toMatchObject({ statusCode: 502 });
+    // Nothing was written, and the upstream connection was released.
+    expect(res.headers["content-disposition"]).toBeUndefined();
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it.each(["image/jpeg", "image/webp", "video/mp4", "audio/mp4"])("relays %s", async (type) => {
+    stubFetch({ [`${CDN}/a`]: () => media("bytes", { "content-type": type }) });
+    const res = createFakeResponse();
+
+    await downloadService.streamToResponse(`${CDN}/a`, "a", asExpress(res));
+    expect(res.received()).toBe("bytes");
+  });
+
+  it("refuses a file that declares itself larger than the cap", async () => {
+    stubFetch({
+      [`${CDN}/a.mp4`]: () => media("x", { "content-length": String(400 * 1024 * 1024) }),
+    });
+    await expect(
+      downloadService.streamToResponse(`${CDN}/a.mp4`, "a.mp4", asExpress(createFakeResponse()))
+    ).rejects.toMatchObject({ statusCode: 502 });
+  });
+});
+
+describe("streamToResponse - concurrency", () => {
+  // The rate limit bounds requests per window, not requests at once: a full
+  // window's budget can arrive in the same second.
+  it("answers 503 past the concurrent transfer cap, and frees slots after", async () => {
+    const controllers: Array<ReadableStreamDefaultController<Uint8Array>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        media(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controllers.push(controller);
+            },
+          })
+        )
+      )
+    );
+
+    const transfers = Array.from({ length: 32 }, (_, index) =>
+      downloadService.streamToResponse(`${CDN}/${index}.mp4`, "a.mp4", asExpress(createFakeResponse()))
+    );
+    await vi.waitFor(() => expect(getActiveDownloadCount()).toBe(32));
+
+    await expect(
+      downloadService.streamToResponse(`${CDN}/x.mp4`, "a.mp4", asExpress(createFakeResponse()))
+    ).rejects.toMatchObject({ statusCode: 503 });
+
+    for (const controller of controllers) controller.close();
+    await Promise.all(transfers);
+    expect(getActiveDownloadCount()).toBe(0);
   });
 });
