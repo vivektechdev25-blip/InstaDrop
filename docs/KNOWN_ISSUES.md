@@ -1,5 +1,22 @@
 # Known Issues
 
+## A missing Netlify variable silently published a site that called localhost — fixed 2026-10-15
+
+**Symptom.** After the first successful production deploy of the reliability pass, `reelsavenow.com` loaded correctly, showed the right branding, and had correct canonical/sitemap URLs — but every download failed. The browser was sending requests to `http://localhost:4000/api/v1/fetch`, which fails with `ERR_CONNECTION_REFUSED` on every visitor's machine.
+
+**Cause, confirmed rather than inferred.** `NEXT_PUBLIC_*` values are inlined into the client bundle by `next build`, so whatever is present at build time is permanent for that deploy. Both call sites read the variable as `process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"`. When the deploy environment did not provide the variable, the `??` substituted the development fallback and **the build still succeeded**. Verified at the time: the live bundle was the new build (it carried the new branding), contained `localhost:4000`, and contained no Railway URL; nothing in the repository shadowed the variable (no committed `.env`, no `env` block in `next.config.js`), and a local build *with* the variable set inlined it correctly. So the code read the variable properly — it was simply absent at build time, and nothing said so.
+
+Why the variable was absent is a deploy-platform setting (a scope that excludes Builds, a context that covers only Deploy previews, or the variable set on a different Netlify site), and is not visible from the repository.
+
+**Fix: make the misconfiguration loud instead of silent.**
+
+- `buildEnv.cjs` rejects a value that is unset, blank, not an absolute http(s) URL, or points at a local hostname, with a message naming the exact setting to change.
+- `next.config.js` runs that check at the start of `next build`, so the deploy fails rather than publishing a broken bundle. It is keyed on the build *subcommand* as well as the phase: `next lint` loads the config under `PHASE_PRODUCTION_BUILD` too, and linting must not require deploy-time variables (caught by a test).
+- `src/lib/apiConfig.ts` is now the only place the fallback exists, it strips trailing slashes so `${API_BASE_URL}/download` can never produce `//download`, and the fallback is gated on `NODE_ENV` so the literal is compiled out of production bundles entirely. That keeps "does the published bundle mention localhost?" a trustworthy check on a live site — an unreachable fallback left in the bundle would have made that signal ambiguous.
+- A test fails if any other file under `apps/web/src` grows its own localhost fallback.
+
+**Verified** (clean build in an isolated copy, Node 20, three scenarios): no variable → build fails with the actionable message; `http://localhost:4000/api/v1` → build fails; correct Railway URL → build succeeds, the bundle contains the Railway URL and **zero** `localhost:4000` occurrences. `pnpm lint` passes with no deploy variables set. CI's build step now supplies a reserved-TLD placeholder (`*.invalid`), since CI artifacts are never deployed but must still satisfy the same guard.
+
 ## Open: production API runs Node 24, everything else targets Node 20 — found 2026-10-14
 
 `engines` says `>=20`, the proposed Netlify config builds on 20, and the docs described Node 20 throughout — but the API's Docker base image (`mcr.microsoft.com/playwright:v1.62.1-jammy`) ships **Node v24.18.1** (verified: `docker run --entrypoint node <image> --version`). `>=20` is technically satisfied, so nothing is broken, but production was never the version anything was tested on. CI now runs on both 20 and 24 (matrix), and the full suite passes on both locally (24 natively, 20 in a clean `node:20` container). Pinning one version would mean choosing a different Playwright base image or installing Node explicitly in the Dockerfile — a deliberate decision, not made here.
