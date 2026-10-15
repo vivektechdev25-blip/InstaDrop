@@ -14,7 +14,9 @@ const SUPPORTED_CONTENT = "Photos · Reels · Videos · Carousels";
 
 export function Footer() {
   return (
-    <footer className="border-t border-border">
+    <footer className="relative border-t border-border">
+      {/* A hairline of the logo's gradient over the top border. */}
+      <div aria-hidden="true" className="absolute inset-x-0 -top-px mx-auto h-px max-w-3xl bg-brand-gradient opacity-60" />
       <div className="container flex flex-col items-center gap-3 py-5 text-center">
         <Link href="/" className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BrandLogo className="h-8" />

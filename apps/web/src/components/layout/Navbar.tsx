@@ -45,12 +45,12 @@ export function Navbar() {
                 href={link.href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "relative py-2 text-sm transition-colors duration-150 ease-out hover:text-foreground",
+                  "relative py-2 text-sm font-medium transition-colors duration-150 ease-out hover:text-foreground",
                   // Underline indicator, not just a color swap - a color-only
                   // "active" state is easy to miss at a glance; a persistent
                   // underline reads immediately, even for colorblind users.
                   isActive
-                    ? "text-foreground after:absolute after:inset-x-0 after:-bottom-[1px] after:h-0.5 after:rounded-full after:bg-primary"
+                    ? "text-foreground after:absolute after:inset-x-0 after:-bottom-[1px] after:h-0.5 after:rounded-full after:bg-cta-gradient"
                     : "text-muted-foreground"
                 )}
               >
