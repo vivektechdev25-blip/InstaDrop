@@ -16,6 +16,22 @@ export interface RateLimiters {
   privateContent: RateLimitRequestHandler;
 }
 
+/**
+ * "Try again later" gives a user nothing to act on. express-rate-limit sets
+ * Retry-After (seconds) before calling the handler, so the message can say
+ * how long - in the same rounding a person would use.
+ */
+export function describeRetry(retryAfterSeconds: number): string {
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return "Too many requests. Please try again later.";
+  }
+  if (retryAfterSeconds < 60) {
+    return "Too many requests. Please try again in a minute.";
+  }
+  const minutes = Math.ceil(retryAfterSeconds / 60);
+  return `Too many requests. Please try again in ${minutes} minutes.`;
+}
+
 function createRateLimiter({ windowMs, maxRequests }: RateLimiterOptions): RateLimitRequestHandler {
   return rateLimit({
     windowMs,
@@ -25,7 +41,7 @@ function createRateLimiter({ windowMs, maxRequests }: RateLimiterOptions): RateL
     handler: (_req, res) => {
       res.status(429).json({
         success: false,
-        message: "Too many requests. Please try again later.",
+        message: describeRetry(Number(res.getHeader("Retry-After"))),
         data: null,
         errors: null,
         code: "RATE_LIMITED",

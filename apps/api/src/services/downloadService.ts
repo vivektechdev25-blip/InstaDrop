@@ -1,7 +1,7 @@
 import type { Response } from "express";
-import { Readable } from "node:stream";
+import { Readable, Transform, type TransformCallback } from "node:stream";
 import { AppError } from "../errors/AppError";
-import { isAllowedCdnUrl } from "../constants/allowedCdnHosts";
+import { isAllowedCdnUrlString } from "../constants/allowedCdnHosts";
 
 // A CDN URL that redirects is normal; a chain this long isn't, and
 // following one indefinitely is a cheap way to tie up a worker.
@@ -14,6 +14,39 @@ const MAX_REDIRECTS = 5;
 // default timeout of its own.
 const RESPONSE_HEADER_TIMEOUT_MS = 15000;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+
+function readPositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Memory is not what limits downloads - measured 2026-10-15, 20 concurrent
+// transfers peaked at 91MB and 40 clients that stop reading mid-transfer
+// peaked at 97MB, because pipe() propagates backpressure. What is unbounded
+// without a cap is sockets and outbound bandwidth, and the rate limit alone
+// does not bound concurrency: 60 requests a window can all arrive at once.
+// Sized inside the measured-safe range (40 stalled clients: 97MB), so it
+// only ever refuses a burst that is no longer ordinary traffic.
+const MAX_CONCURRENT_DOWNLOADS = readPositiveInt(process.env.DOWNLOAD_MAX_CONCURRENCY, 32);
+// The header timeout above stops at the first byte. Without a second guard,
+// an upstream that sends headers and then stalls holds the transfer - and
+// its concurrency slot - open forever. Reset by every chunk, so a slow but
+// moving transfer is never cut off.
+const BODY_IDLE_TIMEOUT_MS = readPositiveInt(process.env.DOWNLOAD_IDLE_TIMEOUT_MS, 30_000);
+// Reels are tens of megabytes. Anything this large is not one, and the
+// allowlisted hosts serve far more than Instagram media.
+const MAX_DOWNLOAD_BYTES = readPositiveInt(process.env.DOWNLOAD_MAX_BYTES, 300 * 1024 * 1024);
+// Only media is proxied. The allowlisted CDNs also serve other content
+// types, and relaying, say, an HTML page from this origin is not something
+// the endpoint exists to do.
+const MEDIA_CONTENT_TYPE = /^(video|image|audio)\//i;
+
+let activeDownloads = 0;
+
+/** Exposed for tests. */
+export function getActiveDownloadCount(): number {
+  return activeDownloads;
+}
 
 function sanitizeFilename(filename: string): string {
   const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 255);
@@ -56,7 +89,7 @@ async function fetchMediaFollowingSafeRedirects(sourceUrl: string): Promise<glob
   let currentUrl = sourceUrl;
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    if (!isAllowedCdnUrl(new URL(currentUrl))) {
+    if (!isAllowedCdnUrlString(currentUrl)) {
       throw new AppError(
         "INVALID_URL",
         "This media link isn't a supported Instagram CDN URL.",
@@ -114,7 +147,17 @@ async function streamToResponse(
     );
   }
 
-  const contentType = upstreamResponse.headers.get("content-type") ?? "application/octet-stream";
+  const contentType = upstreamResponse.headers.get("content-type") ?? "";
+  const declaredLength = Number(upstreamResponse.headers.get("content-length") ?? "");
+
+  if (!MEDIA_CONTENT_TYPE.test(contentType) || declaredLength > MAX_DOWNLOAD_BYTES) {
+    await upstreamResponse.body.cancel().catch(() => {});
+    throw new AppError(
+      "SERVER_ERROR",
+      "This link didn't lead to a downloadable media file.",
+      502
+    );
+  }
   // fetch() transparently decompresses a gzip/br/deflate body, but the
   // upstream Content-Length still counts the *compressed* bytes - forwarding
   // it would promise the client a different byte count than what's streamed
@@ -139,6 +182,7 @@ async function streamToResponse(
   // page.evaluate typings elsewhere) and Node's own stream/web type for the
   // same runtime object.
   const nodeStream = Readable.fromWeb(upstreamResponse.body as never);
+  const guard = createTransferGuard();
 
   await new Promise<void>((resolve, reject) => {
     let isSettled = false;
@@ -153,8 +197,14 @@ async function streamToResponse(
       resolve();
     }
 
-    nodeStream.pipe(res);
+    nodeStream.pipe(guard).pipe(res);
     nodeStream.on("error", settle);
+    guard.on("error", (error) => {
+      // Ends the client's transfer as failed rather than leaving it hanging.
+      nodeStream.destroy();
+      res.destroy(error);
+      settle(error);
+    });
     res.on("error", settle);
     res.on("finish", () => settle());
     // Fires on a completed response too (harmlessly - settle() and
@@ -164,9 +214,77 @@ async function streamToResponse(
     // this keeps pulling CDN bytes into a response nobody is reading.
     res.on("close", () => {
       nodeStream.destroy();
+      guard.destroy();
       settle();
     });
   });
 }
 
-export const downloadService = { streamToResponse };
+/**
+ * Counts bytes and watches for a stalled upstream, failing the transfer if
+ * either limit is crossed. A pass-through, so backpressure still reaches
+ * the CDN exactly as it did with a direct pipe.
+ */
+function createTransferGuard(): Transform {
+  let transferred = 0;
+  let idleTimer: NodeJS.Timeout | undefined;
+
+  const guard = new Transform({
+    transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback) {
+      transferred += chunk.length;
+      armIdleTimer();
+      if (transferred > MAX_DOWNLOAD_BYTES) {
+        callback(new Error("download exceeded the size limit"));
+        return;
+      }
+      callback(null, chunk);
+    },
+    flush(callback: TransformCallback) {
+      clearTimeout(idleTimer);
+      callback();
+    },
+    destroy(error, callback) {
+      clearTimeout(idleTimer);
+      callback(error);
+    },
+  });
+
+  function armIdleTimer(): void {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => guard.destroy(new Error("upstream stalled mid-transfer")),
+      BODY_IDLE_TIMEOUT_MS
+    );
+  }
+
+  armIdleTimer();
+  return guard;
+}
+
+/**
+ * Holds one of a fixed number of transfer slots for the whole download, and
+ * refuses with 503 rather than queueing: a download is user-initiated and
+ * cheap to retry, so waiting gains nothing over an honest "busy".
+ */
+async function streamWithinCapacity(
+  sourceUrl: string,
+  filename: string,
+  res: Response
+): Promise<void> {
+  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
+    throw new AppError(
+      "SERVER_ERROR",
+      "We're handling too many downloads right now. Please try again in a moment.",
+      503
+    );
+  }
+
+  activeDownloads += 1;
+  try {
+    await streamToResponse(sourceUrl, filename, res);
+  } finally {
+    activeDownloads -= 1;
+  }
+}
+
+export const downloadService = { streamToResponse: streamWithinCapacity };

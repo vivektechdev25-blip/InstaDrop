@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { loadServerConfig, parseCorsOrigins, parsePort } from "../src/config/env";
+import {
+  loadServerConfig,
+  parseCommit,
+  parseCorsOrigins,
+  parsePort,
+  parseTrustProxy,
+} from "../src/config/env";
 
 describe("parsePort", () => {
   it("defaults to 4000 when unset or blank", () => {
@@ -50,6 +56,34 @@ describe("loadServerConfig", () => {
     expect(loadServerConfig({ PORT: "5000", CORS_ORIGIN: "https://example.com" })).toEqual({
       port: 5000,
       corsOrigins: ["https://example.com"],
+      trustProxy: undefined,
+      commit: null,
     });
+  });
+});
+
+describe("parseTrustProxy", () => {
+  it("keeps the default when unset", () => {
+    expect(parseTrustProxy(undefined)).toBeUndefined();
+    expect(parseTrustProxy("  ")).toBeUndefined();
+  });
+
+  it("reads a bare integer as a hop count", () => {
+    expect(parseTrustProxy("2")).toBe(2);
+  });
+
+  it("reads anything else as a list of names or CIDRs", () => {
+    expect(parseTrustProxy("loopback, 100.64.0.0/10")).toEqual(["loopback", "100.64.0.0/10"]);
+  });
+});
+
+describe("parseCommit", () => {
+  it("shortens a full SHA", () => {
+    expect(parseCommit("1194212ee13f3794769d984bb73247635f147345")).toBe("1194212");
+  });
+
+  // It is echoed on a public endpoint, so only a hex SHA is ever accepted.
+  it.each([undefined, "", "not-a-sha", "<script>", "abc"])("ignores %s", (value) => {
+    expect(parseCommit(value)).toBeNull();
   });
 });

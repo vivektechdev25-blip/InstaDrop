@@ -15,15 +15,27 @@ const FORCED_SHUTDOWN_TIMEOUT_MS = 10000;
 // state that looks healthy but can't serve the real frontend - see
 // config/env.ts.
 const config = loadServerConfig();
-const app = createApp({ corsOrigins: config.corsOrigins });
+const app = createApp({
+  corsOrigins: config.corsOrigins,
+  trustProxy: config.trustProxy,
+  commit: config.commit,
+});
 
 // Explicit 0.0.0.0 rather than Node's default: container platforms route
 // traffic to the container's external interface, and a process bound only
 // to loopback is unreachable from outside it - the failure mode being a
 // health check that never passes while the logs look perfectly healthy.
 const server = app.listen(config.port, "0.0.0.0", () => {
-  console.log(`ReelSaveNow API listening on port ${config.port}`);
+  console.log(`ReelSaveNow API listening on port ${config.port}${config.commit ? ` (commit ${config.commit})` : ""}`);
 });
+
+// Node's defaults give a client 60s to finish sending headers and 300s to
+// finish sending a request. Nothing this API accepts takes more than a few
+// hundred bytes, so those windows only serve a client trickling a request
+// in to hold a socket open (slowloris). Response streaming is unaffected:
+// both limits stop counting once the request has been received.
+server.headersTimeout = 15_000;
+server.requestTimeout = 20_000;
 
 const shutdown = createShutdown({
   closeBrowser,

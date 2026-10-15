@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useReducer } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import type { ApiSuccessResponse, InstagramPost } from "@reelsavenow/types";
 import { apiClient } from "@/lib/apiClient";
 import { describeRequestFailure } from "@/lib/apiErrors";
@@ -87,58 +87,71 @@ function reducer(state: PrivateFetchState, action: PrivateFetchAction): PrivateF
 
 export function usePrivateContentFetch() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // The form already ignores clicks while a request is pending, but submit
+  // has more than one caller (the form, and the auto-submit when a link is
+  // opened via the catch-all route), and each call is a browser render on
+  // the server. Guarding here makes submit itself refuse a second call while
+  // one is in flight, whoever makes it.
+  const inFlight = useRef(false);
 
   const submit = useCallback(async (rawSessionCookie: string, rawUrl: string) => {
-    dispatch({ type: "VALIDATING" });
-
-    const sessionCookie = cleanSessionCookie(rawSessionCookie);
-    const url = cleanInstagramUrl(rawUrl);
-
-    if (!isPlausibleSessionCookie(sessionCookie)) {
-      dispatch({
-        type: "ERROR",
-        message: "That doesn't look like a full session cookie value. Double-check you copied the whole thing.",
-        code: "INVALID_URL",
-      });
-      return;
-    }
-
-    if (!isValidInstagramUrl(url)) {
-      dispatch({
-        type: "ERROR",
-        message: "Please paste a link to one of your own Reels or posts.",
-        code: "INVALID_URL",
-      });
-      return;
-    }
-
-    dispatch({ type: "FETCHING" });
+    if (inFlight.current) return;
+    inFlight.current = true;
 
     try {
-      const response = await apiClient.post<ApiSuccessResponse<InstagramPost>>("/private/fetch", {
-        sessionCookie,
-        url,
-      });
-      dispatch({ type: "SUCCESS", post: response.data.data });
-    } catch (error) {
-      const failure = describeRequestFailure(error);
+      dispatch({ type: "VALIDATING" });
 
-      if (failure.status === 429) {
-        dispatch({ type: "RATE_LIMITED", message: failure.message });
+      const sessionCookie = cleanSessionCookie(rawSessionCookie);
+      const url = cleanInstagramUrl(rawUrl);
+
+      if (!isPlausibleSessionCookie(sessionCookie)) {
+        dispatch({
+          type: "ERROR",
+          message: "That doesn't look like a full session cookie value. Double-check you copied the whole thing.",
+          code: "INVALID_URL",
+        });
         return;
       }
 
-      if (failure.code === "SESSION_EXPIRED") {
-        dispatch({ type: "SESSION_EXPIRED", message: failure.message });
+      if (!isValidInstagramUrl(url)) {
+        dispatch({
+          type: "ERROR",
+          message: "Please paste a link to one of your own Reels or posts.",
+          code: "INVALID_URL",
+        });
         return;
       }
 
-      if (failure.code === "ACCESS_DENIED") {
-        dispatch({ type: "ACCESS_DENIED", message: failure.message });
-        return;
-      }
+      dispatch({ type: "FETCHING" });
 
-      dispatch({ type: "ERROR", message: failure.message, code: failure.code });
+      try {
+        const response = await apiClient.post<ApiSuccessResponse<InstagramPost>>("/private/fetch", {
+          sessionCookie,
+          url,
+        });
+        dispatch({ type: "SUCCESS", post: response.data.data });
+      } catch (error) {
+        const failure = describeRequestFailure(error);
+
+        if (failure.status === 429) {
+          dispatch({ type: "RATE_LIMITED", message: failure.message });
+          return;
+        }
+
+        if (failure.code === "SESSION_EXPIRED") {
+          dispatch({ type: "SESSION_EXPIRED", message: failure.message });
+          return;
+        }
+
+        if (failure.code === "ACCESS_DENIED") {
+          dispatch({ type: "ACCESS_DENIED", message: failure.message });
+          return;
+        }
+
+        dispatch({ type: "ERROR", message: failure.message, code: failure.code });
+      }
+    } finally {
+      inFlight.current = false;
     }
   }, []);
 

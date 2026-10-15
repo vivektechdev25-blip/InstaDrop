@@ -20,6 +20,12 @@ Three independent budgets, one `express-rate-limit` instance each, all in-memory
 
 This is sufficient for the MVP's single-instance Railway deployment.
 
+**Keyed on the real client — fixed 2026-10-15.** Measured on production: from one stable client IPv4 address, consecutive requests to `/download` landed in two or three different buckets (`RateLimit-Remaining` 57, 55, 58, 56, 54, 53). With `trust proxy = 1`, `req.ip` resolved to whichever Railway-internal proxy forwarded the request, because Railway's edge reaches the container through more than one hop. The limiter was therefore keyed per proxy, not per client: strangers shared buckets, and any one user's effective budget was a multiple of the advertised one.
+
+Railway does not document its hop count, and answers from its own staff contradict each other. So trust is now defined by **address class**, not count: loopback, link-local, private and RFC 6598 shared space (`100.64.0.0/10`, used inside Railway) are proxies; the client is the right-most *public* address in `X-Forwarded-For`. That cannot be spoofed — a forged entry always sits to the left of the address Railway's edge observed, and the walk stops before reaching it. Tested with varying proxy hops, forged entries (including a forged `100.64.x`), and distinct clients. `TRUST_PROXY` overrides it without a deploy if Railway's forwarding changes, and the API logs once per process whether the key resolved to a public address. `proxy-addr` is pinned to 2.0.8, which fixes IP spoofing through IPv4-mapped IPv6 addresses in exactly this kind of subnet trust (GHSA-jqcg-44mw-7w3h).
+
+**Callers are told how long to wait.** Every 429 carries `Retry-After`, its message states the wait in minutes, and the API now lists `Retry-After` and `RateLimit-*` in `Access-Control-Expose-Headers` — before, the cross-origin frontend received the 429 but could not read when it would lift.
+
 **Note:** in-memory rate limiting only holds its limit correctly on a single instance. If the API scales horizontally (multiple Render instances), each instance tracks its own counters, so the effective limit multiplies with instance count. Revisit with a distributed store (e.g. Redis-backed sliding window) before scaling out — see [ARCHITECTURE.md](./ARCHITECTURE.md#rate-limiting-in-memory-for-mvp) and [TODO.md](./TODO.md).
 
 ## Direct URL mode: auto-fetch throttling
@@ -42,6 +48,12 @@ Mitigations, each confirmed live rather than assumed:
 
 **Hostname edge cases, tested:** a bare `fbcdn.net`, suffix lookalikes (`evilfbcdn.net`), the allowlisted name used as a subdomain (`fbcdn.net.evil.com`), trailing-dot hosts, IDN lookalikes (which become punycode and no longer match) and IP literals are all rejected. **Assessed, not mitigated:** the check is on hostnames, not resolved IPs. An allowlisted name resolving to a private address would need control of Meta's own DNS, so pinning resolved IPs was judged not worth its complexity.
 
+**Explicit ports and embedded credentials are refused (2026-10-15)** even on an allowlisted host. No real CDN link has either, and both widen what a caller can make the server do: a port turns the proxy into a port prober against those hosts, and `user:pass@` is forwarded upstream as credentials the caller chose.
+
+**Unparseable input is a 400, not a 500 (2026-10-15).** Zod runs a refinement even after an earlier check on the same string has failed, and the refinement called `new URL()`, which throws. Measured on production: `?url=x` answered 500 and logged a stack trace — a cheap way to flood the logs. The check now has a non-throwing form, and URLs are capped at 4096 characters.
+
+**Only media is relayed, within bounds (2026-10-15).** The allowlisted CDNs serve more than Instagram media, so a response is relayed only if its `Content-Type` is `video/*`, `image/*` or `audio/*` and it is no larger than 300MB (declared or counted). A body that goes 30s without a byte is cut off, so a stalled upstream cannot hold a transfer — and its slot — open. At most 32 transfers run at once; past that the answer is 503. Memory was never the constraint (40 clients that stop reading mid-transfer peaked at 94MB, because `pipe()` propagates backpressure); sockets and bandwidth were, and the rate limit bounds requests per window, not requests at once.
+
 **Upstream timeout.** Getting response headers back is capped at 15s; the body stream deliberately is not, since a real reel is tens of megabytes. Without the first cap, a host that accepts the connection and never answers held the request open indefinitely — Express sets no default timeout. The stream is also torn down when the client disconnects mid-download, instead of continuing to pull CDN bytes into a response nobody is reading.
 
 ## CORS
@@ -54,6 +66,8 @@ Mitigations, each confirmed live rather than assumed:
 
 **Production deployment must set `CORS_ORIGIN` to the exact deployed frontend origin(s)**; see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
+**Narrowed and readable (2026-10-15):** methods are limited to `GET` and `POST`, preflights are cached for 10 minutes, and the rate-limit headers are exposed so the frontend can tell users when to retry.
+
 For a disallowed `Origin`, the response simply carries no `Access-Control-Allow-Origin`. The browser enforces that by blocking the calling page's JavaScript from reading it; the server doesn't refuse the request outright.
 
 ## Error responses and logging (2026-10-14)
@@ -61,6 +75,38 @@ For a disallowed `Origin`, the response simply carries no `Access-Control-Allow-
 - **Clients only ever receive the response envelope:** a static message plus a machine-readable `code`. They never get stack traces, file paths or Playwright messages. Tested for validation errors, 404s, unknown errors, and an all-tiers-failed 502 whose underlying error mentions an internal path.
 - **Logs record the stack (which includes the message), never the whole error object.** An error's enumerable properties can carry request data. The `express.json()` parse error carries the raw body, so a malformed `/private/fetch` request used to write the caller's session cookie to the logs, and get a 500 for what is a 400 client error. That leak was reproduced directly against the original handler before it was fixed.
 - **In the own-private-content flow, unexpected errors have the session cookie (raw and URL-decoded) redacted before logging**, even though Playwright's errors aren't expected to contain it. "Not expected to" is an assumption about a third-party library's error text, and the cost of it being wrong once is a live credential in the logs.
+
+## Request parsing and server timeouts (2026-10-15)
+
+- **Query strings are parsed with Node's `querystring`, not `qs`.** No endpoint takes nested or array parameters, so the extended parser was pure attack surface carrying two open advisories (GHSA-4mjr-xmp4-gh2g, a DoS; GHSA-x5fp-wj9c-mxmx, an array-limit bypass). They are no longer in the request path at all.
+- **JSON bodies are capped at 8kb**, down from the 100kb default. The largest legitimate body is a URL plus a session cookie of at most 1000 characters.
+- **Slow requests are cut off.** Headers must arrive within 15s and the whole request within 20s (Node's defaults: 60s and 300s), so a client cannot hold sockets open by trickling a request in. Response streaming is unaffected.
+
+## Frontend headers (2026-10-15)
+
+Before this, the site sent only Netlify's defaults (HSTS and `nosniff`). It now sends, from `apps/web/securityHeaders.cjs` via `next.config.js`:
+
+- **Content-Security-Policy** built from an inventory of what the site loads: no third-party scripts, fonts, analytics or frames. `connect-src` allows only this origin and the API; `img-src` / `media-src` only Instagram's CDN; `object-src`, `frame-ancestors` and `base-uri` are locked. `script-src` keeps `'unsafe-inline'` because the App Router streams its payload in inline scripts and the theme is set by one before first paint — removing it needs per-request nonces, which a statically served page cannot carry. Verified in real Chromium against the production build: the full paste → preview → download flow and every page, in light and dark mode, with **zero** CSP violations and zero console errors.
+- **X-Frame-Options: DENY**, **Referrer-Policy: strict-origin-when-cross-origin**, **Permissions-Policy** (camera, microphone, geolocation, payment, USB off), **Cross-Origin-Opener-Policy: same-origin**, and HSTS restated so it does not depend on a platform default. No `includeSubDomains` or `preload`: both commit every subdomain to HTTPS, and preload cannot be quickly undone.
+
+**The image optimizer was an open proxy — closed 2026-10-15.** Nothing renders `next/image`, but `images.remotePatterns` still enabled `/_next/image` for Instagram's CDN. Verified on production: `reelsavenow.com/_next/image?url=<any cdninstagram.com image>` fetched and served it (200, `image/jpeg`) — bandwidth and transforms billed to this site, through the endpoint several open Next.js advisories target. Images are now unoptimized with no remote hosts; the same request returns 404.
+
+## Dependency advisories (audited 2026-10-15)
+
+`pnpm audit` reported 56 advisories. Triaged by whether production code can reach them:
+
+| Package | Where it runs | Action |
+|---|---|---|
+| `proxy-addr` < 2.0.8 (critical, IP spoofing) | API, every request | **Pinned to 2.0.8** — reachable once trust became subnet-based |
+| `qs` < 6.16 (2 × moderate) | API query parsing | **Removed from the request path** (see above) |
+| `axios` < 1.20 (11, up to high) | API Tier 1 scraper; web client | **Pinned to 1.20.0** in both |
+| `next` 14.2.35 (critical/high, patched only in 15.5.x) | Web | **Not fixed — needs a major upgrade, see below.** Reachable surface reduced: image optimizer disabled; no middleware, server actions, rewrites, i18n or WebSockets are used; the Windows-only RCE does not apply to Netlify |
+| `vitest`, `vite`, `esbuild`, `tinypool`, `nanoid`, `source-map-js` | Dev and test tooling only | Not reachable in production |
+| `postcss`, `braces`, `glob`, `postcss-selector-parser` | Build tooling (our own CSS) | Not reachable in production |
+
+**Open: Next.js 14 → 15.** The remaining reachable advisories (React Server Components DoS, cache poisoning) are fixed only in Next 15.5.x. That upgrade requires React 19 and the async request-API changes — a migration, not a patch, and kept out of this change deliberately.
+
+**Open: dev dependencies ship in the API image.** The runner stage copies the full `node_modules` from the deps stage, so test tooling is present (never executed) in production. A production-only install stage would shrink the image; it was left alone because getting the workspace symlinks right in this Dockerfile took four rounds of real builds the first time.
 
 ## Private account handling
 

@@ -1,29 +1,53 @@
 import type { MediaItem } from "@reelsavenow/types";
 import { describe, expect, it } from "vitest";
-import { describeRequestFailure } from "@/lib/apiErrors";
+import { describeFetchFailure, describeRequestFailure } from "@/lib/apiErrors";
 import { buildDownloadFilename, buildDownloadUrl } from "@/lib/downloadUrl";
 import { isPlausibleSessionCookie } from "@/lib/privateContentValidators";
 import { extractFromCatchAllPath, extractFromQueryParam } from "@/lib/urlParser";
 import { cleanInstagramUrl, isValidInstagramUrl } from "@/lib/validators";
 
 describe("describeRequestFailure", () => {
-  const withResponse = (status: number, data: unknown) => ({ isAxiosError: true, response: { status, data } });
+  const withResponse = (status: number, data: unknown, headers: Record<string, string> = {}) => ({
+    isAxiosError: true,
+    response: { status, data, headers },
+  });
 
   it("uses the API envelope when there is one", () => {
     expect(
       describeRequestFailure(withResponse(403, { success: false, message: "Private.", code: "PRIVATE_ACCOUNT" }))
-    ).toEqual({ status: 403, code: "PRIVATE_ACCOUNT", message: "Private." });
+    ).toEqual({ status: 403, code: "PRIVATE_ACCOUNT", message: "Private.", retryAfterSeconds: null });
   });
 
-  it("doesn't read fields off a platform HTML error page", () => {
-    expect(describeRequestFailure(withResponse(502, "<html>Bad Gateway</html>"))).toEqual({
-      status: 502,
+  // A platform-level page (Railway's proxy answering while the container
+  // restarts) carries no envelope. These used to all read "Something went
+  // wrong", which says nothing about whether retrying will help.
+  it.each([
+    [502, "The server took too long to respond. Please try again."],
+    [503, "Our servers are busy right now. Please try again in a moment."],
+    [504, "The server took too long to respond. Please try again."],
+    [500, "Something went wrong. Please try again."],
+  ])("gives a bare %i HTML page a specific message", (status, message) => {
+    expect(describeRequestFailure(withResponse(status, "<html>error</html>"))).toEqual({
+      status,
       code: null,
-      message: "Something went wrong. Please try again.",
+      message,
+      retryAfterSeconds: null,
     });
   });
 
-  it("falls back to a rate-limit message for a bare 429", () => {
+  it("states how long a rate limit lasts when the server says", () => {
+    const failure = describeRequestFailure(withResponse(429, "", { "retry-after": "540" }));
+    expect(failure.message).toBe("Too many requests. Please try again in 9 minutes.");
+    expect(failure.retryAfterSeconds).toBe(540);
+  });
+
+  it("says a minute for a short wait", () => {
+    expect(describeRequestFailure(withResponse(429, "", { "retry-after": "20" })).message).toBe(
+      "Too many requests. Please try again in a minute."
+    );
+  });
+
+  it("falls back to a rate-limit message for a bare 429 with no header", () => {
     expect(describeRequestFailure(withResponse(429, "")).message).toBe("Too many requests. Please try again later.");
   });
 
@@ -32,11 +56,31 @@ describe("describeRequestFailure", () => {
     ["ETIMEDOUT", "This is taking longer than usual. Please try again in a moment."],
     ["ERR_NETWORK", "We couldn't reach the ReelSaveNow servers. Check your connection and try again."],
   ])("distinguishes %s", (code, message) => {
-    expect(describeRequestFailure({ code })).toEqual({ status: null, code: null, message });
+    expect(describeRequestFailure({ code })).toEqual({ status: null, code: null, message, retryAfterSeconds: null });
   });
 
   it("handles a non-axios failure", () => {
     expect(describeRequestFailure(new Error("boom")).message).toBe("Something went wrong. Please try again.");
+  });
+});
+
+describe("describeFetchFailure", () => {
+  it("reads the envelope and the Retry-After header from a fetch Response", async () => {
+    const response = new Response(JSON.stringify({ success: false, message: "Slow down.", code: "RATE_LIMITED" }), {
+      status: 429,
+      headers: { "retry-after": "300", "content-type": "application/json" },
+    });
+    expect(await describeFetchFailure(response)).toEqual({
+      status: 429,
+      code: "RATE_LIMITED",
+      message: "Slow down.",
+      retryAfterSeconds: 300,
+    });
+  });
+
+  it("copes with an HTML body", async () => {
+    const failure = await describeFetchFailure(new Response("<html>503</html>", { status: 503 }));
+    expect(failure.message).toBe("Our servers are busy right now. Please try again in a moment.");
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useReducer } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import type { ApiSuccessResponse, InstagramPost } from "@reelsavenow/types";
 import { apiClient } from "@/lib/apiClient";
 import { describeRequestFailure } from "@/lib/apiErrors";
@@ -62,37 +62,50 @@ function reducer(state: DownloaderState, action: DownloaderAction): DownloaderSt
 
 export function useInstagramDownloader() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // The form already ignores clicks while a request is pending, but submit
+  // has more than one caller (the form, and the auto-submit when a link is
+  // opened via the catch-all route), and each call is a browser render on
+  // the server. Guarding here makes submit itself refuse a second call while
+  // one is in flight, whoever makes it.
+  const inFlight = useRef(false);
 
   const submit = useCallback(async (rawUrl: string) => {
-    dispatch({ type: "VALIDATING" });
-
-    const cleanedUrl = cleanInstagramUrl(rawUrl);
-
-    if (!isValidInstagramUrl(cleanedUrl)) {
-      dispatch({
-        type: "ERROR",
-        message: "Please paste a valid public Instagram post, reel, or IGTV link.",
-        code: "INVALID_URL",
-      });
-      return;
-    }
-
-    dispatch({ type: "FETCHING" });
+    if (inFlight.current) return;
+    inFlight.current = true;
 
     try {
-      const response = await apiClient.post<ApiSuccessResponse<InstagramPost>>("/fetch", {
-        url: cleanedUrl,
-      });
-      dispatch({ type: "SUCCESS", post: response.data.data });
-    } catch (error) {
-      const failure = describeRequestFailure(error);
+      dispatch({ type: "VALIDATING" });
 
-      if (failure.status === 429) {
-        dispatch({ type: "RATE_LIMITED", message: failure.message });
+      const cleanedUrl = cleanInstagramUrl(rawUrl);
+
+      if (!isValidInstagramUrl(cleanedUrl)) {
+        dispatch({
+          type: "ERROR",
+          message: "Please paste a valid public Instagram post, reel, or IGTV link.",
+          code: "INVALID_URL",
+        });
         return;
       }
 
-      dispatch({ type: "ERROR", message: failure.message, code: failure.code });
+      dispatch({ type: "FETCHING" });
+
+      try {
+        const response = await apiClient.post<ApiSuccessResponse<InstagramPost>>("/fetch", {
+          url: cleanedUrl,
+        });
+        dispatch({ type: "SUCCESS", post: response.data.data });
+      } catch (error) {
+        const failure = describeRequestFailure(error);
+
+        if (failure.status === 429) {
+          dispatch({ type: "RATE_LIMITED", message: failure.message });
+          return;
+        }
+
+        dispatch({ type: "ERROR", message: failure.message, code: failure.code });
+      }
+    } finally {
+      inFlight.current = false;
     }
   }, []);
 

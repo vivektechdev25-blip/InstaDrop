@@ -1,5 +1,34 @@
 # Known Issues
 
+## Security audit — 2026-10-15
+
+Found and fixed, each verified rather than assumed (full detail in [SECURITY.md](./SECURITY.md)):
+
+| Finding | How it was found | Severity |
+| --- | --- | --- |
+| Rate limiter keyed per Railway proxy, not per client | Production: one stable IP landed in 2–3 buckets | High — limits shared between strangers and multiplied per user |
+| `/_next/image` served arbitrary Instagram CDN images | Production: 200 `image/jpeg` for a URL the app never uses | Medium — open proxy billed to the site |
+| `/download?url=x` answered 500 and logged a stack trace | Production | Medium — log flooding |
+| No CSP, framing, referrer or permissions policy on the site | Production response headers | Medium |
+| Frontend could not read `Retry-After` cross-origin | Code + test | Low — users told "try again later" with no time |
+| Download proxy had no concurrency cap, stall guard, size cap or content-type check | Code review + isolated load test | Medium |
+| Allowlist accepted explicit ports and embedded credentials | Code review | Low |
+| `qs` and 100kb JSON bodies in the request path; 60s/300s request timeouts | Code review + `pnpm audit` | Low |
+| `proxy-addr` and `axios` advisories | `pnpm audit`, triaged by reachability | Critical/high on paper; reachable for `proxy-addr` only after the trust fix |
+
+**Load, measured after the fixes** in the production image, 512MB container (the "anon" figure is memory the kernel cannot reclaim — the OOM-kill risk; Docker's own figure also counts page cache):
+
+| Scenario | Outcome | Health during | Peak anon |
+| --- | --- | --- | --- |
+| 20 concurrent `/fetch` | 2 × 200, 8 × 503, 10 × 429 | 35/35 OK, p95 20ms | 311MB (61%) |
+| 40 concurrent downloads | 32 OK, 8 × 503 | 10/10 OK | 94MB (18%) |
+| 40 clients that stop reading | 32 held, 8 × 503 | 28/28 OK | 94MB (18%) |
+| Both bursts at once | as above | 36/36 OK, p95 109ms | 316MB (62%) |
+
+Thirty seconds after the combined burst: 31% memory, `/health` answering in 9ms. Before the crash fix, the same `/fetch` burst left `/health` dead for over 150s.
+
+**Still open:** the Next.js 14 → 15 upgrade (see SECURITY.md), and that the production rate-limit fix can only be confirmed after deploy — by checking that `RateLimit-Remaining` decreases by one per request from a single client.
+
 ## Rapid clicks took the API down — fixed 2026-10-15
 
 **Symptom.** Clicking download about twenty times in a row crashed the Railway backend.
