@@ -109,7 +109,7 @@ describe("PreviewCard download", () => {
     fireEvent.click(downloadButton());
 
     expect(await screen.findByText("Download failed")).toBeTruthy();
-    expect(screen.getByText("Could not download this media right now. Please try again.")).toBeTruthy();
+    expect(screen.getByText("The server took too long to respond. Please try again.")).toBeTruthy();
     expect(createObjectURL).not.toHaveBeenCalled();
   });
 
@@ -157,5 +157,52 @@ describe("PreviewCard download", () => {
 
     await waitFor(() => expect(savedFilenames).toEqual(["reelsavenow_ABC123_2.jpg"]));
     expect(downloadButton().textContent).toContain("(2/2)");
+  });
+});
+
+describe("PreviewCard - rapid clicks", () => {
+  // The reported crash began with a burst of clicks. React flushes state
+  // between discrete events, so the isDownloading guard holds; this pins it
+  // so a refactor cannot quietly reintroduce twenty transfers.
+  it("starts one transfer however many times the button is clicked", async () => {
+    let finish!: () => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = () => resolve(new Response(new Blob(["mp4-bytes"]), { status: 200 }));
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard();
+
+    const button = downloadButton();
+    for (let click = 0; click < 20; click += 1) fireEvent.click(button);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish());
+    await waitFor(() => expect(savedFilenames).toEqual(["reelsavenow_ABC123.mp4"]));
+  });
+
+  it("allows another download once the first has finished", async () => {
+    const fetchMock = vi.fn(async () => new Response(new Blob(["mp4-bytes"]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard();
+
+    fireEvent.click(downloadButton());
+    await waitFor(() => expect(savedFilenames).toHaveLength(1));
+    fireEvent.click(downloadButton());
+    await waitFor(() => expect(savedFilenames).toHaveLength(2));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells the user how long to wait when the download limit is hit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("rate limited", { status: 429, headers: { "retry-after": "420" } }))
+    );
+    renderCard();
+
+    fireEvent.click(downloadButton());
+    expect(await screen.findByText("Too many requests. Please try again in 7 minutes.")).toBeTruthy();
   });
 });

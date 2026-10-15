@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
-import type { ApiErrorResponse, InstagramPost } from "@reelsavenow/types";
+import type { InstagramPost } from "@reelsavenow/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { MediaViewer } from "@/components/downloader/MediaViewer";
 import { buildDownloadFilename, buildDownloadUrl } from "@/lib/downloadUrl";
+import { describeFetchFailure } from "@/lib/apiErrors";
 import { useToast } from "@/hooks/useToast";
 
 export interface PreviewCardProps {
@@ -18,20 +19,6 @@ export interface PreviewCardProps {
  * real message out of one is what lets this surface "too many requests"
  * instead of writing that envelope to disk as a .mp4 (see handleDownload).
  */
-async function readErrorMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    if (payload?.message) return payload.message;
-  } catch {
-    // Not every failure is the API's own envelope - a platform-level 502
-    // returns an HTML page. Fall through to a status-based message.
-  }
-
-  return response.status === 429
-    ? "Too many downloads in a short time. Please try again in a few minutes."
-    : "Could not download this media right now. Please try again.";
-}
-
 export function PreviewCard({ post }: PreviewCardProps) {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -62,9 +49,10 @@ export function PreviewCard({ post }: PreviewCardProps) {
       // user's disk as reelsavenow_<shortcode>.mp4 - a file that looks
       // like a failed download rather than a rate limit they can wait out.
       if (!response.ok) {
+        const failure = await describeFetchFailure(response);
         toast({
           title: response.status === 429 ? "Too many requests" : "Download failed",
-          description: await readErrorMessage(response),
+          description: failure.message,
           variant: "destructive",
         });
         return;

@@ -1,14 +1,29 @@
 const { PHASE_PRODUCTION_BUILD } = require("next/constants");
 const { assertProductionApiBaseUrl } = require("./buildEnv.cjs");
+const { buildSecurityHeaders } = require("./securityHeaders.cjs");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "*.cdninstagram.com" },
-      { protocol: "https", hostname: "scontent.*.fbcdn.net" },
-    ],
+  // Nothing renders next/image - previews are plain <img>/<video> pointing
+  // at Instagram's CDN - but the remotePatterns that used to sit here still
+  // switched on /_next/image for those hosts. Verified on production
+  // 2026-10-15: reelsavenow.com/_next/image fetched and served an arbitrary
+  // cdninstagram.com image (200, image/jpeg), an open image proxy billed to
+  // this site's bandwidth, and the endpoint several open Next.js advisories
+  // target. Unoptimized with no remote hosts closes it.
+  images: { unoptimized: true },
+  // `next dev` relies on eval for fast refresh, which a strict CSP blocks;
+  // the policy is for what users receive, so it is applied to production
+  // builds only.
+  async headers() {
+    if (process.env.NODE_ENV !== "production") return [];
+    return [
+      {
+        source: "/:path*",
+        headers: buildSecurityHeaders(process.env.NEXT_PUBLIC_API_BASE_URL),
+      },
+    ];
   },
 };
 
