@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   findAudioTrackInMp4Header,
   probeHasAudioTrack,
+  readMp4Tracks,
   selectVideoUrlWithAudio,
 } from "../src/services/scrapers/mediaExtractionHelpers";
 
@@ -95,7 +96,7 @@ describe("selectVideoUrlWithAudio", () => {
     stubCdn({ "https://cdn/0.mp4": ["vide"], "https://cdn/1.mp4": ["vide", "soun"] });
 
     await expect(
-      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], null)
+      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], [])
     ).resolves.toBe("https://cdn/1.mp4");
   });
 
@@ -106,7 +107,7 @@ describe("selectVideoUrlWithAudio", () => {
     });
 
     await expect(
-      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], null)
+      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], [])
     ).resolves.toBe("https://cdn/0.mp4");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -115,7 +116,7 @@ describe("selectVideoUrlWithAudio", () => {
     stubCdn({ "https://cdn/0.mp4": ["vide"], "https://cdn/1.mp4": "error" });
 
     await expect(
-      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], null)
+      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], [])
     ).resolves.toBe("https://cdn/1.mp4");
   });
 
@@ -124,27 +125,172 @@ describe("selectVideoUrlWithAudio", () => {
     stubCdn({ "https://cdn/0.mp4": ["vide"], "https://cdn/1.mp4": ["vide"] });
 
     await expect(
-      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], "https://cdn/dash.mp4")
+      selectVideoUrlWithAudio(["https://cdn/0.mp4", "https://cdn/1.mp4"], ["https://cdn/dash.mp4"])
     ).resolves.toBe("https://cdn/0.mp4");
   });
 
   it("uses the captured DASH stream only when there are no candidates", async () => {
     stubCdn({});
-    await expect(selectVideoUrlWithAudio([], "https://cdn/dash.mp4")).resolves.toBe(
+    await expect(selectVideoUrlWithAudio([], ["https://cdn/dash.mp4"])).resolves.toBe(
       "https://cdn/dash.mp4"
     );
   });
 
   it("returns null when there is nothing at all", async () => {
     stubCdn({});
-    await expect(selectVideoUrlWithAudio([], null)).resolves.toBeNull();
+    await expect(selectVideoUrlWithAudio([], [])).resolves.toBeNull();
   });
 
   it("caps how many candidates it probes", async () => {
     const urls = Array.from({ length: 9 }, (_, index) => `https://cdn/${index}.mp4`);
     const fetchMock = stubCdn(Object.fromEntries(urls.map((url) => [url, ["vide"] as const])));
 
-    await selectVideoUrlWithAudio(urls, null);
+    await selectVideoUrlWithAudio(urls, []);
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+});
+
+// The two reels reported from production on 2026-10-15. Both were measured
+// live: their page data and DASH layout are identical - four vp9 video-only
+// representations plus one HE-AAC audio-only representation, all served as
+// content-type video/mp4 - and they differ only in whether the progressive
+// rendition Instagram hands the API carries audio.
+describe("the reported production reels", () => {
+  function stubCdn(tracksByUrl: Record<string, Array<"vide" | "soun"> | "error">) {
+    const fetchMock = vi.fn(async (url: string) => {
+      const tracks = tracksByUrl[String(url)];
+      if (!tracks || tracks === "error") return new Response("nope", { status: 403 });
+      return new Response(new Uint8Array(mp4(tracks)), { status: 206 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const PROGRESSIVE = "https://cdn/progressive.mp4";
+  const DASH_VIDEO = "https://cdn/dash-vp9.mp4";
+  const DASH_AUDIO = "https://cdn/dash-heaac.mp4";
+
+  // DeNCvHYJjqj: the progressive rendition is muxed, so it wins outright and
+  // the vp9/audio-only DASH streams are never considered.
+  it("returns the muxed progressive rendition when it has audio", async () => {
+    const fetchMock = stubCdn({
+      [PROGRESSIVE]: ["vide", "soun"],
+      [DASH_VIDEO]: ["vide"],
+      [DASH_AUDIO]: ["soun"],
+    });
+
+    await expect(selectVideoUrlWithAudio([PROGRESSIVE], [DASH_AUDIO, DASH_VIDEO])).resolves.toBe(
+      PROGRESSIVE
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // DbRC9fzIluT: production logged "no audio track in any of 1 video
+  // candidate(s)". The audio-only DASH stream must never be served as the
+  // video - it would play as a black screen - so the silent progressive file
+  // is still the right answer until a real mux path exists.
+  it("never serves the audio-only DASH stream as the video", async () => {
+    stubCdn({
+      [PROGRESSIVE]: ["vide"],
+      [DASH_AUDIO]: ["soun"],
+      [DASH_VIDEO]: ["vide"],
+    });
+
+    const chosen = await selectVideoUrlWithAudio([PROGRESSIVE], [DASH_AUDIO, DASH_VIDEO]);
+    expect(chosen).not.toBe(DASH_AUDIO);
+    expect(chosen).toBe(PROGRESSIVE);
+  });
+
+  // Instagram serves the audio-only representation as video/mp4, so a caller
+  // that trusted content-type would hand this back with no picture at all.
+  it("rejects an audio-only stream even when it is the only candidate", async () => {
+    stubCdn({ [DASH_AUDIO]: ["soun"] });
+    await expect(selectVideoUrlWithAudio([], [DASH_AUDIO])).resolves.toBeNull();
+  });
+
+  it("reports the failure with track counts but without the signed URL", async () => {
+    const signed = `${PROGRESSIVE}?efg=secret&oh=signature`;
+    stubCdn({ [signed]: ["vide"] });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await selectVideoUrlWithAudio([signed], []);
+
+    const message = warn.mock.calls[0]?.[0] as string;
+    expect(message).toContain("1v/0a");
+    expect(message).not.toContain("signature");
+    warn.mockRestore();
+  });
+
+  // If a later mux path ever supplies a combined file, it must win.
+  it("prefers a combined A/V captured stream over a silent progressive one", async () => {
+    const COMBINED = "https://cdn/combined.mp4";
+    stubCdn({ [PROGRESSIVE]: ["vide"], [COMBINED]: ["vide", "soun"] });
+
+    await expect(selectVideoUrlWithAudio([PROGRESSIVE], [COMBINED])).resolves.toBe(COMBINED);
+  });
+});
+
+describe("readMp4Tracks", () => {
+  it("counts both kinds of track", () => {
+    expect(readMp4Tracks(mp4(["vide", "soun"]))).toEqual({ video: 1, audio: 1 });
+  });
+
+  it("reports an audio-only file as having no video", () => {
+    expect(readMp4Tracks(mp4(["soun"]))).toEqual({ video: 0, audio: 1 });
+  });
+
+  it("returns null when the header cannot be read", () => {
+    expect(readMp4Tracks(Buffer.alloc(0))).toBeNull();
+  });
+});
+
+// Signed CDN URLs carry the access signature in their query string. The
+// diagnostic log is the one place that handles them as text, so it is tested
+// against a URL whose every parameter is something that must not be logged.
+describe("diagnostic logging never leaks credentials", () => {
+  const SECRETS = {
+    oh: "00_AYBsignature",
+    oe: "68EFFFFF",
+    _nc_sid: "sessionish",
+    ccb: "17-1",
+    stp: "dst-mp4",
+  };
+
+  it("logs only hostname, encode tag and track counts", async () => {
+    const query = new URLSearchParams({
+      ...SECRETS,
+      efg: Buffer.from(JSON.stringify({ vencode_tag: "xpv_progressive.TEST" })).toString("base64"),
+    });
+    const url = `https://scontent.cdninstagram.com/o1/v/t2/f2/m86/asset.mp4?${query}`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array(mp4(["vide"])), { status: 206 }))
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await selectVideoUrlWithAudio([url], []);
+    const message = warn.mock.calls[0]?.[0] as string;
+
+    expect(message).toContain("scontent.cdninstagram.com");
+    expect(message).toContain("xpv_progressive.TEST");
+    expect(message).toContain("1v/0a");
+    for (const [key, value] of Object.entries(SECRETS)) {
+      expect(message, `leaked ${key}`).not.toContain(value);
+    }
+    expect(message).not.toContain("?");
+    expect(message).not.toContain("asset.mp4");
+    warn.mockRestore();
+  });
+
+  it("stays quiet and safe when the url is unparseable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array(mp4(["vide"])), { status: 206 }))
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(selectVideoUrlWithAudio(["not-a-url"], [])).resolves.toBe("not-a-url");
+    expect(warn.mock.calls[0]?.[0]).toContain("unparseable");
+    warn.mockRestore();
   });
 });

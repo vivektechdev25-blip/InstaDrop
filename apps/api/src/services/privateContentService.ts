@@ -9,6 +9,7 @@ import {
   NOT_FOUND_MARKER,
   readPageMeta,
   findProgressiveVideoUrls,
+  MAX_CAPTURED_MEDIA,
   selectVideoUrlWithAudio,
   stripByteRangeParams,
   findFullResolutionImage,
@@ -131,12 +132,16 @@ async function extractOwnPrivateContent(
 ): Promise<InstagramPost> {
   const page = await context.newPage();
 
-  let capturedVideoUrl: string | null = null;
+  // Every media response the page fetches, deduplicated. Instagram serves
+  // its audio-only DASH representation as content-type video/mp4, so the
+  // header cannot tell these apart - selectVideoUrlWithAudio() probes the
+  // bytes instead and never returns one with no video track.
+  const capturedMediaUrls = new Set<string>();
   page.on("response", (response) => {
-    if (capturedVideoUrl) return;
+    if (capturedMediaUrls.size >= MAX_CAPTURED_MEDIA) return;
     const contentType = response.headers()["content-type"] ?? "";
-    if (contentType.includes("video")) {
-      capturedVideoUrl = stripByteRangeParams(response.url());
+    if (contentType.includes("video") || contentType.includes("audio")) {
+      capturedMediaUrls.add(stripByteRangeParams(response.url()));
     }
   });
 
@@ -206,7 +211,7 @@ async function extractOwnPrivateContent(
   // Same audio-verified selection as the public tier.
   const videoUrl =
     slideImageUrls.length === 1
-      ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), capturedVideoUrl)
+      ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), [...capturedMediaUrls])
       : null;
 
   const media: MediaItem[] = slideImageUrls.map((imageUrl) =>

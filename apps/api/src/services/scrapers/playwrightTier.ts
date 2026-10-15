@@ -9,6 +9,7 @@ import {
   NOT_FOUND_MARKER,
   readPageMeta,
   findProgressiveVideoUrls,
+  MAX_CAPTURED_MEDIA,
   selectVideoUrlWithAudio,
   stripByteRangeParams,
   findFullResolutionImage,
@@ -61,19 +62,22 @@ export const playwrightTier: IMediaScraper = {
       // 2026-08-04: stripping those two params from ANY captured chunk's
       // URL and re-requesting it makes the CDN serve the complete file
       // (verified via `curl -L`, full valid .mp4, correct byte size) - so
-      // we just take the first video/mp4 response and strip the range.
+      // stripping the range off any captured chunk is enough.
       //
-      // Confirmed live 2026-08-05: this captured URL is Instagram's
-      // DASH-adaptive video representation - video-only, vp9, zero audio
-      // streams (verified via ffprobe on the actual downloaded file). It's
-      // only used as a fallback now; findProgressiveVideoUrl() below finds
-      // the real muxed (h264+aac) file and is preferred whenever available.
-      let capturedVideoUrl: string | null = null;
+      // Every media response is kept, deduplicated, rather than just the
+      // first. Confirmed live 2026-10-15 on two real reels: the captured
+      // DASH representations are vp9 video-only, and Instagram serves its
+      // audio-only representation with content-type video/mp4 too - on one
+      // reel that audio-only stream arrived FIRST, so taking the first
+      // "video" response could hand back a file with no picture at all.
+      // content-type cannot tell these apart, so selectVideoUrlWithAudio()
+      // probes the bytes and never returns a stream with no video track.
+      const capturedMediaUrls = new Set<string>();
       page.on("response", (response) => {
-        if (capturedVideoUrl) return;
+        if (capturedMediaUrls.size >= MAX_CAPTURED_MEDIA) return;
         const contentType = response.headers()["content-type"] ?? "";
-        if (contentType.includes("video")) {
-          capturedVideoUrl = stripByteRangeParams(response.url());
+        if (contentType.includes("video") || contentType.includes("audio")) {
+          capturedMediaUrls.add(stripByteRangeParams(response.url()));
         }
       });
 
@@ -139,7 +143,7 @@ export const playwrightTier: IMediaScraper = {
       // the first one - see selectVideoUrlWithAudio().
       const videoUrl =
         slideImageUrls.length === 1
-          ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), capturedVideoUrl)
+          ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), [...capturedMediaUrls])
           : null;
 
       const media: MediaItem[] = slideImageUrls.map((imageUrl) =>

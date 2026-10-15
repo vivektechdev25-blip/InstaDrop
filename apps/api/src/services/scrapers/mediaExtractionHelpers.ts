@@ -129,6 +129,8 @@ const AUDIO_PROBE_TIMEOUT_MS = 8000;
 // Each probe is one ranged request. Instagram offers three entries in
 // practice, and the right one has always been among the first few.
 const MAX_AUDIO_PROBES = 4;
+// The page refetches the same few streams repeatedly; a handful is plenty.
+export const MAX_CAPTURED_MEDIA = 8;
 
 /**
  * Reads an MP4's `moov` box and reports whether it declares an audio track.
@@ -138,7 +140,21 @@ const MAX_AUDIO_PROBES = 4;
  * very differently from "definitely silent": a URL we couldn't inspect is
  * still a better answer than one we know has no sound.
  */
-export function findAudioTrackInMp4Header(header: Buffer): boolean | null {
+/** What an MP4's `moov` box says the file actually contains. */
+export interface Mp4Tracks {
+  video: number;
+  audio: number;
+}
+
+/**
+ * Counts the tracks an MP4 header declares.
+ *
+ * Returns null - not zero - when that cannot be determined (no `moov` inside
+ * the fetched prefix, or a malformed box). Callers must keep "unknown" and
+ * "none" apart: a file we could not inspect is still a better answer than one
+ * we know is missing what we need.
+ */
+export function readMp4Tracks(header: Buffer): Mp4Tracks | null {
   let offset = 0;
 
   while (offset + 8 <= header.length) {
@@ -151,22 +167,20 @@ export function findAudioTrackInMp4Header(header: Buffer): boolean | null {
     if (size < 8) return null;
 
     if (type === "moov") {
-      // Truncated moov: an audio track could still be in the part we never
-      // fetched, so this is unknown rather than "no audio".
+      // A truncated moov may still list tracks in the part never fetched.
       if (offset + size > header.length) return null;
 
       const moov = header.subarray(offset, offset + size);
+      const tracks: Mp4Tracks = { video: 0, audio: 0 };
       // Each track declares its kind in an `hdlr` box, whose handler type
       // ("vide" / "soun") sits 12 bytes past the box type.
       for (let index = 0; index + 16 <= moov.length; index += 1) {
-        if (
-          moov.subarray(index, index + 4).toString("latin1") === "hdlr" &&
-          moov.subarray(index + 12, index + 16).toString("latin1") === "soun"
-        ) {
-          return true;
-        }
+        if (moov.subarray(index, index + 4).toString("latin1") !== "hdlr") continue;
+        const handler = moov.subarray(index + 12, index + 16).toString("latin1");
+        if (handler === "vide") tracks.video += 1;
+        if (handler === "soun") tracks.audio += 1;
       }
-      return false;
+      return tracks;
     }
 
     offset += size;
@@ -175,59 +189,124 @@ export function findAudioTrackInMp4Header(header: Buffer): boolean | null {
   return null;
 }
 
+/** Whether an MP4 header declares an audio track; null when undetermined. */
+export function findAudioTrackInMp4Header(header: Buffer): boolean | null {
+  const tracks = readMp4Tracks(header);
+  return tracks === null ? null : tracks.audio > 0;
+}
+
 /** Fetches just enough of the file to inspect its track list. */
-export async function probeHasAudioTrack(url: string): Promise<boolean | null> {
+export async function probeMp4Tracks(url: string): Promise<Mp4Tracks | null> {
   try {
     const response = await fetch(url, {
       headers: { Range: `bytes=0-${AUDIO_PROBE_BYTES - 1}` },
       signal: AbortSignal.timeout(AUDIO_PROBE_TIMEOUT_MS),
     });
     if (!response.ok) return null;
-    return findAudioTrackInMp4Header(Buffer.from(await response.arrayBuffer()));
+    return readMp4Tracks(Buffer.from(await response.arrayBuffer()));
   } catch {
     // A probe is an optimisation, never a reason to fail the request.
     return null;
   }
 }
 
+/** Whether the file at `url` contains an audio track; null when undetermined. */
+export async function probeHasAudioTrack(url: string): Promise<boolean | null> {
+  const tracks = await probeMp4Tracks(url);
+  return tracks === null ? null : tracks.audio > 0;
+}
+
+/** One inspected candidate, kept together for logging and ranking. */
+interface RankedCandidate {
+  url: string;
+  tracks: Mp4Tracks | null;
+  /** False for the DASH streams captured off the page, which may be audio-only. */
+  progressive: boolean;
+}
+
+/** Describes a candidate without leaking its signed query string. */
+function describe({ url, tracks }: RankedCandidate): string {
+  let host = "unparseable";
+  let tag = "?";
+  try {
+    const parsed = new URL(url);
+    host = parsed.hostname;
+    // efg carries public encoding metadata (the rendition's codec profile),
+    // not anything bearer-like. Only that one field is read, and only when it
+    // is a string, so nothing else from the query can reach the log.
+    const efg = parsed.searchParams.get("efg");
+    if (efg) {
+      const { vencode_tag: vencodeTag } = JSON.parse(Buffer.from(efg, "base64").toString());
+      if (typeof vencodeTag === "string") tag = vencodeTag.slice(0, 80);
+    }
+  } catch {
+    // Diagnostics must never throw.
+  }
+  const composition = tracks === null ? "unknown" : `${tracks.video}v/${tracks.audio}a`;
+  return `${host} [${tag}] ${composition}`;
+}
+
 /**
- * Picks the video URL to hand back, preferring one whose bytes actually
- * contain an audio track.
+ * Picks the media URL to hand back, preferring one whose bytes actually
+ * contain both a video and an audio track.
  *
  * Instagram's `video_versions` entries are indistinguishable from their
  * metadata - same `type`, same `vencode_tag`, same decoded asset name - yet
- * on some networks the first entry is silent and another is not. Picking by
- * index is what shipped silent downloads to production; picking by what the
- * file actually contains is the only check that holds everywhere.
+ * the same reel can yield a muxed rendition on one network and a silent one
+ * on another. Picking by index is what shipped silent downloads; picking by
+ * what the file actually contains is the only check that holds everywhere.
  *
- * Order of preference: a candidate with a confirmed audio track, then one
- * whose audio could not be determined, then the first candidate, then the
- * captured DASH stream (known video-only, so genuinely last).
+ * The DASH streams captured from the page are a last resort and are probed
+ * too, because `content-type` does not identify them: Instagram serves its
+ * audio-only DASH representation as `video/mp4`, so trusting the header can
+ * hand the user a file with no picture at all. Anything with no video track
+ * is therefore never returned as the video.
+ *
+ * Order of preference: a file with both tracks; then a progressive entry that
+ * could not be probed (it is a video rendition either way, and might carry
+ * audio); then any file known to have a video track; and only then a captured
+ * stream that could not be probed.
  */
 export async function selectVideoUrlWithAudio(
-  candidates: string[],
-  capturedFallback: string | null
+  progressiveCandidates: string[],
+  capturedCandidates: string[]
 ): Promise<string | null> {
-  let firstUnknown: string | null = null;
-  let probed = 0;
+  const ranked: RankedCandidate[] = [];
 
-  for (const candidate of candidates.slice(0, MAX_AUDIO_PROBES)) {
-    const hasAudio = await probeHasAudioTrack(candidate);
-    probed += 1;
-    if (hasAudio === true) return candidate;
-    if (hasAudio === null && firstUnknown === null) firstUnknown = candidate;
+  // Progressive renditions first: they are h264+aac and play anywhere, while
+  // the captured DASH streams are vp9 and video-only in every reel measured.
+  const ordered = [
+    ...progressiveCandidates.slice(0, MAX_AUDIO_PROBES).map((url) => ({ url, progressive: true })),
+    ...capturedCandidates.slice(0, MAX_AUDIO_PROBES).map((url) => ({ url, progressive: false })),
+  ];
+
+  for (const { url, progressive } of ordered) {
+    const tracks = await probeMp4Tracks(url);
+    if (tracks !== null && tracks.video > 0 && tracks.audio > 0) return url;
+    ranked.push({ url, tracks, progressive });
   }
 
-  // Worth saying out loud: this is the state that silently shipped soundless
-  // downloads. If it recurs, the page genuinely offered no muxed rendition,
-  // which is a different problem from picking the wrong entry.
-  if (probed > 0 && firstUnknown === null) {
+  // An unprobeable progressive entry still comes from video_versions, so it is
+  // a video rendition that might carry audio - worth more than one measured to
+  // have none. An unprobeable captured stream is ranked last instead, because
+  // it could be the audio-only DASH representation, which is not a video at all.
+  const chosen =
+    ranked.find((entry) => entry.progressive && entry.tracks === null) ??
+    ranked.find((entry) => entry.tracks !== null && entry.tracks.video > 0) ??
+    ranked.find((entry) => entry.tracks === null) ??
+    null;
+
+  if (ranked.length > 0) {
+    // This is the state that silently shipped soundless downloads. Log what
+    // each candidate actually was - host, encode tag and track counts, never
+    // the signed URL - so the next occurrence is diagnosable from the logs.
     console.warn(
-      `[mediaExtraction] no audio track in any of ${probed} video candidate(s); returning a video-only file`
+      `[mediaExtraction] no candidate had both video and audio; inspected ${ranked.length}: ` +
+        ranked.map(describe).join(" | ")
     );
   }
 
-  return firstUnknown ?? candidates[0] ?? capturedFallback;
+  return chosen?.url ?? null;
 }
 export function stripByteRangeParams(videoUrl: string): string {
   const parsed = new URL(videoUrl);
