@@ -9,14 +9,17 @@ import { playwrightTier } from "./scrapers/playwrightTier";
 // tested to arrive at this order.
 const SCRAPER_TIERS: IMediaScraper[] = [instagramUrlDirectTier, playwrightTier];
 
-async function extractMedia(url: string): Promise<InstagramPost> {
+async function extractMedia(
+  url: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<InstagramPost> {
   for (const tier of SCRAPER_TIERS) {
     // Skipped silently: an unavailable tier has already logged why, once
     // (see circuitBreaker.ts), rather than on every request.
     if (tier.isAvailable?.() === false) continue;
 
     try {
-      return await tier.extract(url);
+      return await tier.extract(url, options);
     } catch (error) {
       if (error instanceof AppError) {
         // A tier reached Instagram and got a definitive answer (private

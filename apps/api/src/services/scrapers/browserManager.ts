@@ -22,21 +22,67 @@ let browserPromise: Promise<Browser> | null = null;
 //   arbitrary user-supplied hosts.
 const CONTAINER_SAFE_ARGS = ["--disable-dev-shm-usage", "--no-sandbox"];
 
-// Chromium is the memory ceiling on this service, not Node: a real
-// image-heavy Instagram page in a fresh browser context costs far more
-// than the Express process around it, and docs/DEPLOYMENT.md records that
-// Render's smaller instances OOM-kill the browser mid-scrape. Requests
-// past this cap wait for a slot instead of opening another context and
-// pushing the instance over that ceiling.
-const MAX_CONCURRENT_CONTEXTS = 2;
-// Past this, waiting is pointless rather than merely slow: the frontend's
-// own axios timeout (30s) would expire before the queue drained, so the
-// caller gets a fast, honest 503 instead of a connection held open for
-// work nobody is still waiting for.
-const MAX_QUEUED_REQUESTS = 8;
+function readPositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Chromium is the memory ceiling on this service, not Node. Measured
+// 2026-10-15 in the production image, 512MB container, 20 concurrent
+// /fetch requests: two live contexts drove the container to 99.4% of its
+// memory limit, /health stopped answering entirely, and it never recovered
+// - which is exactly what a platform health check sees as a crash.
+//
+// Measured again with the load shedding below in place, same burst, same
+// container: two contexts still peaked at 503.8MB of 512MB - a 1.6% margin -
+// while one peaked at 337MB, a 34% margin. Both recovered, but only one of
+// them has room for the container to be doing anything else at the time.
+//
+// One context costs throughput only under concurrent load; a single user
+// waiting on a single reel is unaffected either way. Raise it with
+// SCRAPER_MAX_CONCURRENCY=2 on an instance with 1GB or more.
+const MAX_CONCURRENT_CONTEXTS = readPositiveInt(process.env.SCRAPER_MAX_CONCURRENCY, 1);
+
+// Queue depth is a promise about waiting time, not a buffer to hide behind.
+// A scrape takes roughly 20-30s, so with the old depth of 8 a queued caller
+// waited up to ~5 minutes; the frontend gives up after 30s, so most of that
+// queue was work being done for callers who had already left - while still
+// holding the memory that killed the container. Depth is now small enough
+// that anything accepted can plausibly still be wanted when it runs.
+const MAX_QUEUED_REQUESTS = readPositiveInt(process.env.SCRAPER_MAX_QUEUED, 3);
+
+// And even inside that queue, waiting is bounded: past this the honest
+// answer is "we're busy", returned immediately, rather than a connection
+// held open past the client's own timeout.
+const QUEUE_WAIT_TIMEOUT_MS = readPositiveInt(process.env.SCRAPER_QUEUE_WAIT_MS, 10_000);
+
+// A scrape that hangs holds its slot forever and starves every queued
+// caller behind it. Navigation and page waits have their own timeouts, but
+// nothing bounded the whole operation until now.
+const SCRAPE_TIMEOUT_MS = readPositiveInt(process.env.SCRAPER_TIMEOUT_MS, 45_000);
+
+// Chromium does not give memory back to the container the way a Node heap
+// does: after the burst above, eight chrome-headless processes still held
+// ~345MB with no contexts open. Relaunching the browser periodically
+// reclaims that; it costs one launch (~1s) per N scrapes.
+const MAX_CONTEXTS_PER_BROWSER = readPositiveInt(process.env.SCRAPER_BROWSER_RECYCLE_AFTER, 40);
+
+interface SlotWaiter {
+  grant: () => void;
+  cancel: (error: AppError) => void;
+}
 
 let activeContexts = 0;
-const slotWaiters: Array<() => void> = [];
+let contextsSinceLaunch = 0;
+const slotWaiters: SlotWaiter[] = [];
+
+function busyError(): AppError {
+  return new AppError(
+    "SERVER_ERROR",
+    "We're handling too many requests right now. Please try again in a moment.",
+    503
+  );
+}
 
 /**
  * Lazily launches the shared browser, and - this is the part that matters -
@@ -71,6 +117,7 @@ export function getBrowser(): Promise<Browser> {
     });
 
   browserPromise = pending;
+  contextsSinceLaunch = 0;
   return pending;
 }
 
@@ -80,33 +127,73 @@ function invalidate(stale: Promise<Browser>): void {
   }
 }
 
-async function acquireContextSlot(): Promise<void> {
+/**
+ * Waits for a concurrency slot, but never longer than the caller can still
+ * use it: the wait ends early if the queue is full, if the deadline passes,
+ * or if the client has already disconnected.
+ */
+async function acquireContextSlot(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw busyError();
+
   if (activeContexts < MAX_CONCURRENT_CONTEXTS) {
     activeContexts += 1;
     return;
   }
 
   if (slotWaiters.length >= MAX_QUEUED_REQUESTS) {
-    throw new AppError(
-      "SERVER_ERROR",
-      "We're handling too many requests right now. Please try again in a moment.",
-      503
-    );
+    throw busyError();
   }
 
-  // Resolved by releaseContextSlot(), which hands its slot straight over
-  // rather than decrementing - so the count can never drift above the cap
-  // between one request finishing and the next waking up.
-  await new Promise<void>((resolve) => slotWaiters.push(resolve));
+  await new Promise<void>((resolve, reject) => {
+    const waiter: SlotWaiter = {
+      grant: () => {
+        cleanup();
+        resolve();
+      },
+      cancel: (error) => {
+        cleanup();
+        reject(error);
+      },
+    };
+
+    const timer = setTimeout(() => remove(waiter)?.cancel(busyError()), QUEUE_WAIT_TIMEOUT_MS);
+    const onAbort = (): void => remove(waiter)?.cancel(busyError());
+
+    function cleanup(): void {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    }
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    slotWaiters.push(waiter);
+  });
+}
+
+/** Takes a waiter out of the queue, returning it only if it was still there. */
+function remove(waiter: SlotWaiter): SlotWaiter | null {
+  const index = slotWaiters.indexOf(waiter);
+  if (index === -1) return null;
+  slotWaiters.splice(index, 1);
+  return waiter;
 }
 
 function releaseContextSlot(): void {
+  // Hands the slot straight over rather than decrementing, so the count can
+  // never drift above the cap between one request finishing and the next
+  // waking up.
   const nextWaiter = slotWaiters.shift();
   if (nextWaiter) {
-    nextWaiter();
+    nextWaiter.grant();
     return;
   }
   activeContexts -= 1;
+}
+
+/** Closes the browser once it is idle, so the next scrape gets a fresh one. */
+async function recycleBrowserIfIdle(): Promise<void> {
+  if (activeContexts > 0 || slotWaiters.length > 0) return;
+  if (contextsSinceLaunch < MAX_CONTEXTS_PER_BROWSER) return;
+  await closeBrowser();
 }
 
 /**
@@ -116,11 +203,16 @@ function releaseContextSlot(): void {
  * caller can leak a context on an error path, and both scraping flows
  * (public Playwright tier, own-private-content) share one cap rather than
  * each opening contexts independently.
+ *
+ * Pass the request's `signal` so that a caller who has already given up
+ * stops costing memory: a disconnected client's queued request is dropped
+ * instead of being handed a browser nobody is waiting for.
  */
 export async function withBrowserContext<T>(
-  run: (context: BrowserContext) => Promise<T>
+  run: (context: BrowserContext) => Promise<T>,
+  { signal }: { signal?: AbortSignal } = {}
 ): Promise<T> {
-  await acquireContextSlot();
+  await acquireContextSlot(signal);
 
   try {
     const browser = await getBrowser();
@@ -128,9 +220,10 @@ export async function withBrowserContext<T>(
       userAgent: USER_AGENT,
       viewport: VIEWPORT,
     });
+    contextsSinceLaunch += 1;
 
     try {
-      return await run(context);
+      return await withTimeout(run(context));
     } finally {
       // A context belonging to an already-dead browser throws here; the
       // scrape's own outcome is what matters, so never let cleanup
@@ -139,6 +232,33 @@ export async function withBrowserContext<T>(
     }
   } finally {
     releaseContextSlot();
+    await recycleBrowserIfIdle().catch(() => {});
+  }
+}
+
+/** Fails a scrape that outlives its budget, so its slot is not held forever. */
+async function withTimeout<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AppError(
+                "SERVER_ERROR",
+                "This post took too long to load. Please try again.",
+                504
+              )
+            ),
+          SCRAPE_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -146,6 +266,7 @@ export async function closeBrowser(): Promise<void> {
   const pending = browserPromise;
   if (!pending) return;
   browserPromise = null;
+  contextsSinceLaunch = 0;
 
   // Shutdown path: a launch that failed, or a browser that already died,
   // must not throw here - app.ts awaits this before closing the server,
@@ -156,4 +277,19 @@ export async function closeBrowser(): Promise<void> {
   } catch {
     // Nothing left to close.
   }
+}
+
+/** Exposed for tests and for the readiness probe. */
+export function getPoolState(): {
+  active: number;
+  queued: number;
+  maxConcurrent: number;
+  maxQueued: number;
+} {
+  return {
+    active: activeContexts,
+    queued: slotWaiters.length,
+    maxConcurrent: MAX_CONCURRENT_CONTEXTS,
+    maxQueued: MAX_QUEUED_REQUESTS,
+  };
 }

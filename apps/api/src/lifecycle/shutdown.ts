@@ -21,12 +21,16 @@ export function createShutdown({
   closeServer,
   exit,
   forcedExitTimeoutMs,
-}: ShutdownDependencies): () => Promise<void> {
-  return async function shutdown(): Promise<void> {
-    const forcedExit = setTimeout(() => exit(1), forcedExitTimeoutMs);
+}: ShutdownDependencies): (exitCode?: number) => Promise<void> {
+  // The exit code is a signal to the platform: 0 means "asked to stop"
+  // (SIGTERM during a deploy), non-zero means the process is going down
+  // because something broke. A crash that exits 0 looks like a clean
+  // shutdown in the host's logs and hides the failure that caused it.
+  return async function shutdown(exitCode = 0): Promise<void> {
+    const forcedExit = setTimeout(() => exit(exitCode || 1), forcedExitTimeoutMs);
     forcedExit.unref?.();
 
     await closeBrowser();
-    closeServer(() => exit(0));
+    closeServer(() => exit(exitCode));
   };
 }
