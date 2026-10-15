@@ -60,64 +60,175 @@ export async function readPageMeta(page: Page): Promise<PageMeta> {
 }
 
 /**
+ * Every progressive video URL the page offers, in page order, deduplicated.
+ *
  * Confirmed live 2026-08-05: the DASH-adaptive video Chromium requests
  * during page load is video-only - vp9, zero audio streams, verified via
- * ffprobe. Instagram separately embeds a "progressive" (single-file, pre-
- * muxed) rendition in one of the page's server-rendered
+ * ffprobe. Instagram separately embeds a "progressive" (single-file,
+ * pre-muxed) rendition in one of the page's server-rendered
  * `<script type="application/json" data-sjs>` relay-data blobs, under a
  * `video_versions` array, even for logged-out visitors who never get the
- * interactive `<video>` element mounted (it's meant for
- * `PolarisPostVideoPlayerLoggedOutSurface.react`). Confirmed live against
- * 2 real reels: that URL is h264+aac, the audio Instagram's own
- * `has_audio: true` flag on the same object promises. Instagram's own
- * `video_versions` entries (differing `type` values) all pointed at the
- * identical URL/resolution in both real posts tested - so this returns
- * one URL, not a real list of distinct qualities (see docs/KNOWN_ISSUES.md
- * for why a quality selector isn't being built on top of this).
+ * interactive `<video>` element mounted.
+ *
+ * Returns every entry rather than only the first (2026-10-15). The first
+ * entry is not reliably the muxed one: production served silent videos
+ * because the entry it picked carried no audio track, while the same page
+ * fetched from a different network offered three entries that all did.
+ * Nothing in the entry distinguishes them - `type`, the `vencode_tag` and
+ * even the decoded asset name were identical between an audio-bearing and
+ * a silent URL - so the caller probes the actual bytes instead, via
+ * selectVideoUrlWithAudio().
  *
  * Deep-searches every relay-data script tag rather than assuming a fixed
  * JSON path, since Instagram's internal component nesting isn't a stable
  * contract - only the presence of a `video_versions` array is relied on.
- * Returns null (not a thrown error) if nothing is found, since this is a
- * best-effort upgrade over a captured network response, not a required
- * step - e.g. image/carousel posts never have this data at all.
+ * Returns an empty array (not a thrown error) when nothing is found, since
+ * this is best-effort - image and carousel posts never have this data.
  */
-export async function findProgressiveVideoUrl(page: Page): Promise<string | null> {
-  return page.evaluate<string | null>(`
+export async function findProgressiveVideoUrls(page: Page): Promise<string[]> {
+  const urls = await page.evaluate<string[]>(`
     (() => {
       const scripts = Array.from(
         document.querySelectorAll('script[type="application/json"][data-sjs]')
       );
+      const found = [];
 
-      function deepFindVideoVersions(node, depth) {
-        if (depth > 14 || node === null || typeof node !== "object") return null;
-        if (Array.isArray(node.video_versions) && node.video_versions.length > 0) {
-          return node.video_versions;
+      function collectVideoVersions(node, depth) {
+        if (depth > 14 || node === null || typeof node !== "object") return;
+        if (Array.isArray(node.video_versions)) {
+          for (const version of node.video_versions) {
+            if (version && typeof version.url === "string") found.push(version.url);
+          }
         }
         for (const key of Object.keys(node)) {
-          const found = deepFindVideoVersions(node[key], depth + 1);
-          if (found) return found;
+          collectVideoVersions(node[key], depth + 1);
         }
-        return null;
       }
 
       for (const script of scripts) {
         try {
-          const parsed = JSON.parse(script.textContent || "");
-          const versions = deepFindVideoVersions(parsed, 0);
-          if (versions && versions[0] && typeof versions[0].url === "string") {
-            return versions[0].url;
-          }
+          collectVideoVersions(JSON.parse(script.textContent || ""), 0);
         } catch {
           // Not every data-sjs script tag is well-formed JSON we care
           // about - skip and keep searching the rest.
         }
       }
-      return null;
+      return found;
     })()
   `);
+
+  return [...new Set(urls)];
 }
 
+
+// An MP4's track list lives in the `moov` box. Instagram's progressive files
+// are faststart (moov before mdat, measured at ~36KB), so the first chunk is
+// enough to read the track list without downloading a 20MB video.
+const AUDIO_PROBE_BYTES = 400_000;
+const AUDIO_PROBE_TIMEOUT_MS = 8000;
+// Each probe is one ranged request. Instagram offers three entries in
+// practice, and the right one has always been among the first few.
+const MAX_AUDIO_PROBES = 4;
+
+/**
+ * Reads an MP4's `moov` box and reports whether it declares an audio track.
+ *
+ * Returns null - not false - when that cannot be determined (request failed,
+ * or `moov` wasn't inside the fetched prefix). The caller treats "unknown"
+ * very differently from "definitely silent": a URL we couldn't inspect is
+ * still a better answer than one we know has no sound.
+ */
+export function findAudioTrackInMp4Header(header: Buffer): boolean | null {
+  let offset = 0;
+
+  while (offset + 8 <= header.length) {
+    let size = header.readUInt32BE(offset);
+    const type = header.subarray(offset + 4, offset + 8).toString("latin1");
+    if (size === 1) {
+      if (offset + 16 > header.length) return null;
+      size = Number(header.readBigUInt64BE(offset + 8));
+    }
+    if (size < 8) return null;
+
+    if (type === "moov") {
+      // Truncated moov: an audio track could still be in the part we never
+      // fetched, so this is unknown rather than "no audio".
+      if (offset + size > header.length) return null;
+
+      const moov = header.subarray(offset, offset + size);
+      // Each track declares its kind in an `hdlr` box, whose handler type
+      // ("vide" / "soun") sits 12 bytes past the box type.
+      for (let index = 0; index + 16 <= moov.length; index += 1) {
+        if (
+          moov.subarray(index, index + 4).toString("latin1") === "hdlr" &&
+          moov.subarray(index + 12, index + 16).toString("latin1") === "soun"
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    offset += size;
+  }
+
+  return null;
+}
+
+/** Fetches just enough of the file to inspect its track list. */
+export async function probeHasAudioTrack(url: string): Promise<boolean | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { Range: `bytes=0-${AUDIO_PROBE_BYTES - 1}` },
+      signal: AbortSignal.timeout(AUDIO_PROBE_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    return findAudioTrackInMp4Header(Buffer.from(await response.arrayBuffer()));
+  } catch {
+    // A probe is an optimisation, never a reason to fail the request.
+    return null;
+  }
+}
+
+/**
+ * Picks the video URL to hand back, preferring one whose bytes actually
+ * contain an audio track.
+ *
+ * Instagram's `video_versions` entries are indistinguishable from their
+ * metadata - same `type`, same `vencode_tag`, same decoded asset name - yet
+ * on some networks the first entry is silent and another is not. Picking by
+ * index is what shipped silent downloads to production; picking by what the
+ * file actually contains is the only check that holds everywhere.
+ *
+ * Order of preference: a candidate with a confirmed audio track, then one
+ * whose audio could not be determined, then the first candidate, then the
+ * captured DASH stream (known video-only, so genuinely last).
+ */
+export async function selectVideoUrlWithAudio(
+  candidates: string[],
+  capturedFallback: string | null
+): Promise<string | null> {
+  let firstUnknown: string | null = null;
+  let probed = 0;
+
+  for (const candidate of candidates.slice(0, MAX_AUDIO_PROBES)) {
+    const hasAudio = await probeHasAudioTrack(candidate);
+    probed += 1;
+    if (hasAudio === true) return candidate;
+    if (hasAudio === null && firstUnknown === null) firstUnknown = candidate;
+  }
+
+  // Worth saying out loud: this is the state that silently shipped soundless
+  // downloads. If it recurs, the page genuinely offered no muxed rendition,
+  // which is a different problem from picking the wrong entry.
+  if (probed > 0 && firstUnknown === null) {
+    console.warn(
+      `[mediaExtraction] no audio track in any of ${probed} video candidate(s); returning a video-only file`
+    );
+  }
+
+  return firstUnknown ?? candidates[0] ?? capturedFallback;
+}
 export function stripByteRangeParams(videoUrl: string): string {
   const parsed = new URL(videoUrl);
   parsed.searchParams.delete("bytestart");

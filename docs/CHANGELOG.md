@@ -1,4 +1,5 @@
-# Changelog
+# Changelo- **Downloaded reels had no sound in production (2026-10-15).** The scraper returned `video_versions[0]` and trusted it, but that entry is not reliably the muxed rendition - the URL production received and an audio-bearing one decoded to the same asset with the same `type` and `vencode_tag`, and which one carries audio varies by the network the page is fetched from. The scraper now collects every candidate and picks one whose bytes actually contain an audio track, by reading the `moov` box from a 400KB ranged request. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+g
 
 All notable changes to this project are documented in this file.
 

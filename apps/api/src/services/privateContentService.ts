@@ -8,7 +8,8 @@ import {
   POST_LOAD_WAIT_MS,
   NOT_FOUND_MARKER,
   readPageMeta,
-  findProgressiveVideoUrl,
+  findProgressiveVideoUrls,
+  selectVideoUrlWithAudio,
   stripByteRangeParams,
   findFullResolutionImage,
   extractCoverDate,
@@ -202,9 +203,11 @@ async function extractOwnPrivateContent(
   const coverDate = extractCoverDate(meta.ogDescription);
   const slideImageUrls = await collectCarouselSlides(page, coverDate, primaryImageUrl);
 
-  const progressiveVideoUrl =
-    slideImageUrls.length === 1 ? await findProgressiveVideoUrl(page) : null;
-  const videoUrl = slideImageUrls.length === 1 ? progressiveVideoUrl ?? capturedVideoUrl : null;
+  // Same audio-verified selection as the public tier.
+  const videoUrl =
+    slideImageUrls.length === 1
+      ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), capturedVideoUrl)
+      : null;
 
   const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
     videoUrl
