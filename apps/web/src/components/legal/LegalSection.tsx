@@ -13,7 +13,7 @@ interface LegalSectionProps {
 export function LegalSection({ id, title, children }: LegalSectionProps) {
   return (
     <section id={id} className="scroll-mt-24">
-      <h2 className="text-h2">{title}</h2>
+      <h2 className="text-title">{title}</h2>
       <div className="mt-3 flex flex-col gap-3 text-muted-foreground">{children}</div>
     </section>
   );

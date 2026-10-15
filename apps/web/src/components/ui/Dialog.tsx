@@ -42,7 +42,7 @@ export const DialogContent = forwardRef<
         // assumed present.
         aria-modal="true"
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface-elevated text-surface-elevated-foreground p-6 shadow-lg focus:outline-none data-[state=open]:animate-slide-up data-[state=closed]:animate-slide-down-out",
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface-elevated text-surface-elevated-foreground p-6 shadow-lg focus:outline-none data-[state=open]:animate-slide-up data-[state=closed]:animate-slide-down-out",
           className
         )}
         {...props}

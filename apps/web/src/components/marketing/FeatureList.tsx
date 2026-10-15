@@ -1,10 +1,10 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { motion } from "framer-motion";
 import { Layers, Link, RefreshCw, ShieldCheck, Smartphone, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { AddressBarExample } from "@/components/marketing/AddressBarExample";
+import { reveal } from "@/components/motion/ScrollReveal";
 import { siteConfig } from "@/lib/siteConfig";
 import { cn } from "@/lib/utils";
 
@@ -63,29 +63,25 @@ const FEATURES: Feature[] = [
 
 export function FeatureList() {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.35, ease: "easeOut" }}
-      className="container py-16 sm:py-24"
-      data-scroll-reveal
-    >
-      <div className="mx-auto max-w-xl text-center">
-        <h2 className="text-h2">
-          Why{" "}
-          <span className="bg-hero-gradient bg-clip-text text-transparent">{siteConfig.name}</span>
+    <section aria-labelledby="features-heading" className="container py-12 sm:py-16">
+      <div {...reveal()} className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
+        <span className="text-eyebrow uppercase text-primary">Why choose us</span>
+        <h2 id="features-heading" className="text-h2">
+          Why <span className="text-brand-gradient">{siteConfig.name}</span>
         </h2>
       </div>
 
-      <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {FEATURES.map((feature) => (
+      <div className="mx-auto mt-10 grid max-w-5xl gap-4 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">
+        {FEATURES.map((feature, index) => (
           <Card
             key={feature.title}
+            // Staggered along each row of three, so a row arrives as a sweep
+            // rather than all at once - and never as a long queue.
+            {...reveal((index % 3) + 1)}
             className={cn("min-w-0", feature.wide && "sm:col-span-2 lg:col-span-3")}
           >
-            <CardHeader className="gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <CardHeader className="gap-3 pb-4">
+              <span className="flex h-11 w-11 items-center justify-center rounded-md bg-gradient-to-br from-brand-orange/15 via-brand-pink/15 to-brand-violet/20 text-primary ring-1 ring-inset ring-primary/20">
                 <feature.icon className="h-5 w-5" aria-hidden="true" />
               </span>
               <CardTitle>{feature.title}</CardTitle>
@@ -93,14 +89,14 @@ export function FeatureList() {
             <CardContent>
               {feature.wide ? (
                 <div className="lg:flex lg:items-center lg:gap-8">
-                  <p className="text-sm text-muted-foreground lg:max-w-md">{feature.description}</p>
+                  <p className="text-body text-muted-foreground lg:max-w-md">{feature.description}</p>
                   {feature.visual ? (
                     <div className="mt-4 lg:mt-0 lg:w-72 lg:shrink-0">{feature.visual}</div>
                   ) : null}
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  <p className="text-body text-muted-foreground">{feature.description}</p>
                   {feature.visual ? <div className="mt-4">{feature.visual}</div> : null}
                 </>
               )}
@@ -108,6 +104,6 @@ export function FeatureList() {
           </Card>
         ))}
       </div>
-    </motion.section>
+    </section>
   );
 }

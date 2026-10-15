@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -47,12 +46,21 @@ export function InstallModal() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent aria-describedby="install-modal-description">
+      <DialogContent aria-describedby="install-modal-description" className="overflow-hidden pt-7">
+        {/* The logo's gradient along the top edge, and the logo itself -
+            the prompt that offers to put this app on a home screen should
+            look like the icon it is about to put there. */}
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5 bg-brand-gradient" />
         <DialogHeader>
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Download className="h-5 w-5" aria-hidden="true" />
-            </span>
+          <div className="flex items-center gap-3.5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static, pre-sized brand asset */}
+            <img
+              src="/brand/icon-192.png"
+              alt=""
+              width={48}
+              height={48}
+              className="h-12 w-12 shrink-0 drop-shadow-[0_6px_14px_hsl(var(--cta-from)/0.35)]"
+            />
             <DialogTitle>Install {siteConfig.name}</DialogTitle>
           </div>
           <DialogDescription id="install-modal-description">

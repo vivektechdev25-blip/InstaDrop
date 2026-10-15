@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { ClipboardPaste, Download, Eye, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { reveal } from "@/components/motion/ScrollReveal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
@@ -65,164 +64,116 @@ function scrollToInput() {
 }
 
 export function HowItWorks() {
-  // Explicit gate, not assumed: framer-motion's whileInView/pathLength
-  // animation isn't disabled by prefers-reduced-motion on its own - this
-  // project hasn't needed to handle that media feature before now.
-  //
-  // Went through three real, live-verified bugs to land here:
-  // 1. First attempt omitted initial/whileInView entirely for reduced
-  //    motion (rather than explicitly setting pathLength: 1) - left
-  //    motion.path's default pathLength at 0, so the arcs never became
-  //    visible at all, confirmed via getComputedStyle sampled over a
-  //    full second, not a single snapshot.
-  // 2. Conditionally swapping WHICH props got passed (static branch vs.
-  //    animated branch, based on mount state + prefers-reduced-motion)
-  //    fixed that, but broke the animation for everyone: framer-motion
-  //    only reads `initial` on a component's first mount - changing
-  //    props on a later re-render is silently ignored, so paths just
-  //    stayed wherever the first render left them. Also, since the
-  //    server can never resolve a matchMedia query, server and the
-  //    client's first paint disagreed on which branch to take,
-  //    producing a real React hydration-mismatch warning (confirmed
-  //    live: "Server: 1px 1px, Client: 0px 1px" on every load).
-  // 3. Landed on keeping initial/whileInView IDENTICAL on every render
-  //    (server and client always agree - no hydration mismatch, and
-  //    framer-motion's first-mount-only `initial` is never swapped out
-  //    from under itself) and gating only the transition's duration -
-  //    0ms (an instant, imperceptible snap to the fully-drawn state)
-  //    for reduced motion, the real animated duration otherwise. This
-  //    satisfies "elements simply being present" for reduced-motion
-  //    users without fighting framer-motion's actual mount model.
-  const [mounted, setMounted] = useState(false);
-  const prefersReducedMotion = useReducedMotion();
-  useEffect(() => setMounted(true), []);
-
-  const reduceMotion = mounted && prefersReducedMotion === true;
-  const pathDrawProps = {
-    initial: { pathLength: 0 },
-    whileInView: { pathLength: 1 },
-    viewport: { once: true, margin: "-80px" },
-  };
-
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.35, ease: "easeOut" }}
-      className="container py-16 sm:py-24"
-      data-scroll-reveal
-    >
-      <div className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium text-muted-foreground shadow-[0_0_24px_-6px_hsl(var(--primary)/0.5)]">
-          <Sparkles className="h-3 w-3 text-primary" aria-hidden="true" />
+    <section aria-labelledby="how-it-works-heading" className="container py-12 sm:py-16">
+      <div {...reveal()} className="mx-auto flex max-w-xl flex-col items-center gap-3 text-center">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-eyebrow uppercase text-primary">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
           Getting started
         </span>
-        <h2 className="text-h2">
-          How it{" "}
-          <span className="bg-hero-gradient bg-clip-text text-transparent">works</span>
+        <h2 id="how-it-works-heading" className="text-h2">
+          How it <span className="text-brand-gradient">works</span>
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="max-w-md text-body text-muted-foreground">
           Three simple steps to download Instagram content in original quality.
         </p>
       </div>
 
-      <div className="relative mx-auto mt-16 max-w-4xl">
-        {/* Arc connectors only - lg:+ only. Below lg, the composition
-            falls back to a flat, unconnected 3-column row (sm:-lg:) or a
-            stacked single column (below sm:) - neither can sensibly
-            hold curved SVG paths, so no connector of any kind renders
-            there rather than a compressed/broken arc. Dots and the
-            straight 1-3 baseline were both removed per explicit
-            request - just the two curves remain. */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
+      <div className="relative mx-auto mt-12 max-w-4xl sm:mt-14">
+        {/* Arc connectors, lg:+ only. Below lg, the composition falls back to
+            a flat, unconnected 3-column row (sm:-lg:) or a stacked single
+            column (below sm:) - neither can sensibly hold curved paths. They
+            draw in once the cards have arrived (globals.css, .reveal-draw);
+            whenever reveal is not active they are simply drawn. */}
+        <div
+          {...reveal(4)}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 hidden lg:block"
+        >
           <svg viewBox="0 0 1000 400" preserveAspectRatio="none" className="h-full w-full overflow-visible">
-            {/* Soft blurred glow layer, static (not animated) - sits
-                behind the crisp animated line below - a wider, blurred
-                duplicate path for a halo effect. */}
-            <g className="opacity-70 blur-[6px]">
-              <path d={ARC_1_2} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
-              <path d={ARC_2_3} className="fill-none stroke-primary" strokeWidth={5} vectorEffect="non-scaling-stroke" />
+            <defs>
+              {/* The logo's colours along the path, left to right. */}
+              <linearGradient id="how-it-works-arc" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" style={{ stopColor: "hsl(var(--brand-text-from))" }} />
+                <stop offset="50%" style={{ stopColor: "hsl(var(--brand-text-via))" }} />
+                <stop offset="100%" style={{ stopColor: "hsl(var(--brand-text-to))" }} />
+              </linearGradient>
+            </defs>
+            {/* Soft blurred halo behind the crisp line. */}
+            <g className="opacity-50 blur-[6px]">
+              <path d={ARC_1_2} fill="none" stroke="url(#how-it-works-arc)" strokeWidth={5} vectorEffect="non-scaling-stroke" />
+              <path d={ARC_2_3} fill="none" stroke="url(#how-it-works-arc)" strokeWidth={5} vectorEffect="non-scaling-stroke" />
             </g>
-            {/* Draws in after the cards' own whileInView (0.35s, no
-                delay) - a short stagger so it reads as "the connection
-                draws itself in after the steps appear," not everything
-                happening at once. */}
-            <motion.path
+            <path
               d={ARC_1_2}
-              className="fill-none stroke-primary/80"
+              pathLength={1}
+              className="reveal-draw"
+              fill="none"
+              stroke="url(#how-it-works-arc)"
               strokeWidth={2.5}
               vectorEffect="non-scaling-stroke"
-              {...pathDrawProps}
-              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.25 }}
             />
-            <motion.path
+            <path
               d={ARC_2_3}
-              className="fill-none stroke-primary/80"
+              pathLength={1}
+              className="reveal-draw"
+              fill="none"
+              stroke="url(#how-it-works-arc)"
               strokeWidth={2.5}
               vectorEffect="non-scaling-stroke"
-              {...pathDrawProps}
-              transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut", delay: reduceMotion ? 0 : 0.25 }}
             />
           </svg>
         </div>
 
-        {/* lg:gap-24 (well beyond the sm: gap) deliberately opens up more
-            horizontal space between cards than usual - the arcs are
-            masked wherever they pass under a Card's opaque background,
-            so a narrow gap leaves only a barely-visible sliver of curve;
-            a wide gap is what actually makes the arc read as a real
-            sweep rather than a stray dash mark. */}
+        {/* lg:gap-24 opens up more horizontal space than usual on purpose:
+            the arcs are masked wherever they pass under a card's opaque
+            background, so a narrow gap leaves only a sliver of curve. */}
         <div role="list" className="relative grid grid-cols-1 items-start gap-10 sm:grid-cols-3 sm:gap-6 lg:gap-24">
           {STEPS.map((step, index) => (
             <Card
               key={step.title}
               role="listitem"
+              {...reveal(index + 1)}
               className={cn(
                 "relative flex min-w-0 flex-col items-center gap-4 p-6 text-center",
-                // Steps 1 and 3 sit at a shared lower baseline; step 2
-                // (index 1) stays elevated at the row's top edge.
                 index !== 1 && "lg:mt-32"
               )}
             >
-              {/* Straddles the card's own top edge, centered - same
-                  position on all three cards, unlike the previous
-                  pass's icon-corner overlap (which drifted visually
-                  depending on the icon box's own size). */}
-              <span className="absolute -top-3.5 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 border-card bg-primary text-xs font-bold text-primary-foreground">
+              <span className="absolute -top-3.5 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 border-card bg-cta-gradient text-xs font-bold text-white shadow-glow">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <span className="flex h-14 w-14 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+              <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-gradient-to-br from-brand-orange/15 via-brand-pink/15 to-brand-violet/20 text-primary ring-1 ring-inset ring-primary/20">
                 <step.icon className="h-6 w-6" aria-hidden="true" />
               </span>
               <div className="flex flex-col gap-1.5">
                 <h3 className="text-h3">{step.title}</h3>
-                {/* min-h reserves 3 lines' worth of space (text-sm's
-                    1.6 line-height * 14px = 22.4px/line) regardless of
-                    actual line count - step 3's shorter description
-                    otherwise wraps to one fewer line than the other two,
-                    measured as a real 22px card-height difference. */}
-                <p className="min-h-[4.5rem] text-sm text-muted-foreground">{step.description}</p>
+                {/* min-h reserves three lines (15px x 1.65) whatever the
+                    description's length, so the three cards stay level -
+                    step 3's shorter text otherwise left it a line short. */}
+                <p className="min-h-[4.7rem] text-body text-muted-foreground">{step.description}</p>
               </div>
             </Card>
           ))}
         </div>
       </div>
 
-      <div className="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4 rounded-full border border-border bg-card px-6 py-4 text-center shadow-sm sm:flex-row sm:justify-between sm:text-left">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <div
+        {...reveal(5)}
+        className="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4 rounded-lg border border-primary/20 bg-card px-6 py-5 text-center shadow-sm sm:flex-row sm:justify-between sm:rounded-full sm:py-4 sm:text-left"
+      >
+        <div className="flex flex-col items-center gap-3 sm:flex-row">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cta-gradient text-white shadow-glow">
             <Zap className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="flex flex-col">
-            <p className="text-sm font-semibold">No login required. No watermark.</p>
+            <p className="text-body font-semibold">No login required. No watermark.</p>
             <p className="text-sm text-muted-foreground">Original quality, every time.</p>
           </div>
         </div>
-        <Button onClick={scrollToInput} className="w-full rounded-full sm:w-auto">
+        <Button onClick={scrollToInput} className="w-full rounded-full px-6 sm:w-auto">
           Try it now
         </Button>
       </div>
-    </motion.section>
+    </section>
   );
 }

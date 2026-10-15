@@ -23,7 +23,54 @@ node apps/web/scripts/generate-brand-assets.cjs
 
 **Known limit:** the source icon is 329×318, so the 512px icons are upscaled about 1.5× and slightly soft on high-density splash screens. A source of 1024px or more fixes it; rerun the script.
 
+## Brand colours (2026-10-15)
+
+Sampled from the logo artwork (`public/ig.png`), not chosen by eye — a hue histogram of its saturated pixels gives orange `#FB750A` (27°), hot pink `#F30362` (336°, the dominant hue at ~26% of the artwork) and violet `#7003BB` (276°). Tokens live in `src/app/globals.css`; every pairing was measured against WCAG 2.x and tuned per theme, because the same hue needs a darker stop on white and a lighter one on near-black.
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--background` | `#ffffff` | `#0c0911` (violet-tinted black) | page |
+| `--primary` | `#d7095c` — 5.14:1 | `#fb609e` — 6.84:1 | brand text, icons, rings, tints |
+| `--cta-from` → `--cta-to` | `#e10960` → `#9611d0` | same | filled buttons and badges; white label at 4.76 / 6.39:1 in both themes |
+| `--brand-text-*` (3 stops) | `#d15705` `#dc095e` `#8311d0` | `#fc9936` `#fb5195` `#db81f8` | gradient headings (large text, ≥3:1) |
+| `--muted-foreground` | `#656374` — 5.85:1 | `#aba5b6` — 8.27:1 | secondary text |
+| `--brand-orange/pink/violet` | logo colours at full strength | same | decoration only — glows, hairlines — never behind or as text |
+
+Rules that follow from the measurements:
+
+- **A filled button is `bg-cta-gradient` with white text**, never `bg-primary`: in dark mode `--primary` is light enough for text on the page, so a filled `--primary` surface needs dark text (`--primary-foreground`).
+- **Gradient text uses `.text-brand-gradient`**, which falls back to solid `--primary` where `background-clip: text` is unsupported, so text is never transparent.
+- **Hero glow is radial gradients, not blurred shapes.** Worst case — all three glows stacked at full strength — still leaves muted text at 4.66:1 in both themes. Re-check if the opacities change.
+
 ## Typography
+
+Plus Jakarta Sans, self-hosted by `next/font` (the CSP allows no third-party font hosts) with `display: "optional"` and no preload. Measured on the production build with Lighthouse (mobile): `swap` let the arriving font re-wrap the hero headline and push the input down — a 0.248 layout shift, where the site had been at 0 — and preloading put the font on the critical path. With `optional`, a visit that does not have the font almost immediately keeps the metric-matched fallback, and the font is used from cache on the next one.
+
+| Token | Size | Weight | Use |
+|---|---|---|---|
+| `text-display` | clamp 36 → 64px | 800, −0.035em | hero h1 |
+| `text-h1` | clamp 30 → 40px | 800 | page titles |
+| `text-h2` | clamp 28 → 40px | 800, −0.03em | landing-page section titles |
+| `text-title` | clamp 22 → 26px | 700 | section headings inside documents (legal pages) |
+| `text-h3` | 18px | 700 | card and step titles |
+| `text-lead` | clamp 17 → 19px | — | hero subtext |
+| `text-body` | 15px / 1.65 | — | card and FAQ body copy |
+| `text-eyebrow` | 12px, uppercase | 700, 0.08em | section labels |
+
+**Only the hero h1 uses `text-wrap: balance`.** Balance on every heading, `text-wrap: pretty` on every paragraph and `text-rendering: optimizeLegibility` together roughly doubled page layout time on a throttled phone (traced: ~170ms → ~450ms) for no visible gain; they were removed.
+
+## Scroll reveal
+
+`components/motion/ScrollReveal.tsx`, mounted once, plus `reveal(order)` to mark an element. It replaced framer-motion's `whileInView`, which server-rendered every marketing section at `opacity: 0` — a full-page capture without scrolling showed ~1,500px of empty page, and slow hydration could leave real visitors the same.
+
+- Nothing is hidden until the reader scrolls. No JavaScript, slow hydration, print, crawlers and screenshot tools all see the complete page.
+- When it arms, only elements still entirely below the viewport wait for their entrance, so nothing already seen flickers.
+- Reduced motion or no IntersectionObserver: it never arms.
+- `opacity` and `transform` only, 0.55s, staggered 70ms via `--reveal-order`. SVG strokes with `.reveal-draw` draw in after their container.
+
+Removing framer-motion from the marketing sections also cut the home route's first-load JavaScript from 179KB to 144KB.
+
+## Typography (before 2026-10-15)
 
 Four new named tokens for headings — nothing previously distinguished "hero vs. page heading vs. section heading" as separate concepts (the audit found four different sizes doing four different jobs with no shared system: `text-4xl`/`text-5xl` for the hero, `text-3xl` for legal-page h1s, `text-xl` for legal-page h2s, bare `text-lg` for Card/Dialog titles).
 
