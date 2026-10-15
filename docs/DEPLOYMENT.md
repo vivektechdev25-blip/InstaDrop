@@ -60,6 +60,11 @@ Check in the Railway dashboard:
 | `PORT` | Set by Railway | Validated at startup (integer 1–65535) — a malformed value used to become `NaN`, which Node treats as "any free port". Defaults to `4000`. The server binds `0.0.0.0`; a loopback-only bind is unreachable from outside the container. |
 | `CORS_ORIGIN` | **Yes** | Comma-separated **exact** origins, e.g. `https://<netlify-production-domain>,https://<custom-domain>`. Validated at startup: a trailing slash, path, mixed-case host or `*` fails the boot with the exact value to use, instead of silently never matching the browser's `Origin` header. Unset → `http://localhost:3000` (fails safe, never a wildcard). |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No** | Only read by `requestLogRepository.ts`, which nothing imports. Don't set them. |
+| `SCRAPER_MAX_CONCURRENCY` | **No** | How many browser contexts may run at once. Default `1`. Measured 2026-10-15 in a 512MB container under a 20-request burst: `1` peaks at 337MB (66%), `2` peaks at 504MB (98%). Raise to `2` only on an instance with 1GB or more. |
+| `SCRAPER_MAX_QUEUED` | **No** | How many requests may wait for a slot. Default `3`. Deeper queues mean callers waiting past the frontend's own 30s timeout, for work nobody is still there to receive. |
+| `SCRAPER_QUEUE_WAIT_MS` | **No** | How long a queued request waits before getting a 503. Default `10000`. |
+| `SCRAPER_TIMEOUT_MS` | **No** | Hard cap on one scrape, after which it fails with 504 and frees its slot. Default `45000`. |
+| `SCRAPER_BROWSER_RECYCLE_AFTER` | **No** | Contexts served before the idle browser is relaunched to reclaim memory Chromium does not return. Default `40`. |
 
 ### Chromium in the container
 

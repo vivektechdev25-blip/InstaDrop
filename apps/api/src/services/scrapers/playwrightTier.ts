@@ -51,7 +51,7 @@ const PRIVATE_ACCOUNT_MARKERS = ["This Account is Private", "This account is pri
 export const playwrightTier: IMediaScraper = {
   tierName: "playwright",
 
-  async extract(url: string): Promise<InstagramPost> {
+  async extract(url: string, { signal }: { signal?: AbortSignal } = {}): Promise<InstagramPost> {
     return withBrowserContext(async (context) => {
       const page = await context.newPage();
 
@@ -162,6 +162,6 @@ export const playwrightTier: IMediaScraper = {
         author: { username, full_name: username },
         media,
       };
-    });
+    }, { signal });
   },
 };

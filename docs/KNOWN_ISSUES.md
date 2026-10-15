@@ -1,5 +1,40 @@
 # Known Issues
 
+## Rapid clicks took the API down — fixed 2026-10-15
+
+**Symptom.** Clicking download about twenty times in a row crashed the Railway backend.
+
+**Reproduced, with numbers.** Twenty concurrent `POST /fetch` against the production image in a 512MB container:
+
+| | Before | After |
+| --- | --- | --- |
+| Peak container memory | **503.8MB of 512MB (99.4%)** | 337MB (65.8%) |
+| `/health` after the burst | **dead — six consecutive 10s timeouts, still dead 150s later** | HTTP 200 in 5–30ms |
+| Burst duration | 304s | 13s |
+| What callers got | 10 × client timeout, 10 × 429 | 3 × 200, 7 × 503, 10 × 429 |
+| Memory once idle | pinned at 87–98%, never recovered | 34% |
+
+The health endpoint is what matters: Railway polls it, and a container that stops answering is killed and restarted. That restart is the "crash".
+
+**Cause.** Three compounding faults, none of them the download proxy — that was tested separately at 20 concurrent downloads (peak 91MB) and 40 slow clients that open a transfer and stop reading (peak 97MB), and it behaved correctly both times, because `pipe()` propagates backpressure.
+
+1. **The queue promised time nobody had.** The pool allowed 2 concurrent browser contexts with 8 more queued. A scrape takes 20–30s, so a caller at the back of that queue waited up to five minutes — while the frontend gives up after 30s. Most of the queue was therefore work being performed for callers who had already left, and it held the memory that killed the container. Measured: 304s to serve a burst whose clients had all timed out.
+2. **Nothing abandoned work when the client disconnected.** A request that had been given up on still got a browser context.
+3. **Nothing bounded a single scrape.** A stuck scrape held its slot indefinitely, starving everything behind it.
+
+A fourth, separate problem made recovery impossible: Chromium does not return memory the way a Node heap does. After the burst, eight `chrome-headless` processes still held ~345MB with no contexts open.
+
+**Fix.**
+
+- Queue depth 8 → 3, and a queued caller now waits at most 10s before getting an honest 503 instead of a connection held past its own timeout.
+- The request's `AbortSignal` reaches the pool, so a disconnected client's queued request is dropped before it is ever handed a context.
+- A scrape that exceeds 45s fails with 504 and releases its slot.
+- The browser is recycled once it has served 40 contexts and is idle, reclaiming what Chromium does not give back.
+- Default concurrency 2 → 1. Measured with the shedding above already in place: two contexts still peaked at 99.4% (a 1.6% margin), one peaked at 65.8%. All four limits are env-tunable (`SCRAPER_MAX_CONCURRENCY`, `SCRAPER_MAX_QUEUED`, `SCRAPER_QUEUE_WAIT_MS`, `SCRAPER_TIMEOUT_MS`, `SCRAPER_BROWSER_RECYCLE_AFTER`) — raise concurrency to 2 on an instance with 1GB or more.
+- `unhandledRejection` and `uncaughtException` handlers now log the reason and shut down with a non-zero exit code. Previously the process could die with nothing in the logs, and `shutdown()` always exited 0, so a crash looked like a clean stop to the platform.
+
+**Still true after the fix:** a burst peaks higher than idle, and a 512MB instance running at concurrency 2 has almost no headroom. The guard is that it now sheds load and recovers rather than wedging.
+
 ## Railway ignored `railway.json` and failed the build — fixed 2026-10-15
 
 **Symptom.** Every deploy failed during build. Railway's build log showed Railpack auto-detection rather than the Dockerfile:

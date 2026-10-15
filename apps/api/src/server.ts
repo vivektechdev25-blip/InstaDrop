@@ -37,3 +37,22 @@ const shutdown = createShutdown({
 // without ever closing the server.
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
+
+// Node's default for an unhandled rejection is to kill the process, and its
+// default for an uncaught exception is to print to stderr and exit - both
+// without saying which request caused it. On a container host the result is
+// a restart with nothing in the logs to act on. These handlers do not
+// swallow the failure; they make sure it is explained first, then shut down
+// cleanly so in-flight responses and the browser are not abandoned.
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "[server] unhandled promise rejection - shutting down:",
+    reason instanceof Error ? reason.stack : reason
+  );
+  void shutdown(1);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[server] uncaught exception - shutting down:", error.stack ?? error);
+  void shutdown(1);
+});

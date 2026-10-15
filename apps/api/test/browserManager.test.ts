@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("playwright", () => ({ chromium: { launch: vi.fn() } }));
 
@@ -50,8 +50,11 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
-async function loadModules() {
+async function loadModules(env: Record<string, string> = {}) {
   vi.resetModules();
+  // browserManager reads its limits once at import time, so overrides have
+  // to be in place before the dynamic import below.
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
   const { chromium } = await import("playwright");
   const browserManager = await import("../src/services/scrapers/browserManager");
   const { AppError } = await import("../src/errors/AppError");
@@ -148,13 +151,14 @@ describe("withBrowserContext - bounded concurrency", () => {
   });
 
   it("never runs more than two contexts at once", async () => {
-    const { launch, withBrowserContext } = await loadModules();
+    const { launch, withBrowserContext } = await loadModules({ SCRAPER_MAX_CONCURRENCY: "2" });
     launch.mockResolvedValue(createFakeBrowser() as never);
 
     let active = 0;
     let peak = 0;
+    // Five is the whole capacity: two running plus three queued.
     await Promise.all(
-      Array.from({ length: 6 }, () =>
+      Array.from({ length: 5 }, () =>
         withBrowserContext(async () => {
           active += 1;
           peak = Math.max(peak, active);
@@ -167,19 +171,25 @@ describe("withBrowserContext - bounded concurrency", () => {
     expect(peak).toBe(2);
   });
 
-  it("queues eight and rejects the eleventh with a 503, then drains", async () => {
-    const { launch, withBrowserContext, AppError } = await loadModules();
+  // The queue is a promise about waiting time, not a buffer: measured
+  // 2026-10-15, a depth of eight meant a queued caller waited up to five
+  // minutes for work the frontend had abandoned after thirty seconds,
+  // while still holding the memory that took the container down.
+  it("queues three and rejects the sixth with a 503, then drains", async () => {
+    const { launch, withBrowserContext, AppError } = await loadModules({
+      SCRAPER_MAX_CONCURRENCY: "2",
+    });
     launch.mockResolvedValue(createFakeBrowser() as never);
 
     const gate = deferred();
-    const accepted = Array.from({ length: 10 }, () => withBrowserContext(() => gate.promise));
+    const accepted = Array.from({ length: 5 }, () => withBrowserContext(() => gate.promise));
     const overflow = withBrowserContext(() => gate.promise);
 
     await expect(overflow).rejects.toBeInstanceOf(AppError);
     await expect(overflow).rejects.toMatchObject({ statusCode: 503, code: "SERVER_ERROR" });
 
     gate.resolve();
-    await expect(Promise.all(accepted)).resolves.toHaveLength(10);
+    await expect(Promise.all(accepted)).resolves.toHaveLength(5);
   });
 
   it("closes the context on success and on a thrown error", async () => {
@@ -255,5 +265,121 @@ describe("withBrowserContext - bounded concurrency", () => {
       expect(source).not.toContain(".newContext(");
       expect(source).not.toContain("getBrowser(");
     }
+  });
+});
+
+// Measured 2026-10-15 in the production image on a 512MB container: twenty
+// concurrent /fetch requests drove memory to 99.4% of the limit, /health
+// stopped answering, and it never recovered - which a platform health check
+// reads as a crash. These are the guards that keep an overload from
+// becoming an outage.
+describe("load shedding under a client burst", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("gives a queued caller a 503 instead of holding it past its deadline", async () => {
+    const { launch, withBrowserContext, AppError } = await loadModules({
+      SCRAPER_QUEUE_WAIT_MS: "40",
+      SCRAPER_MAX_CONCURRENCY: "2",
+    });
+    launch.mockResolvedValue(createFakeBrowser() as never);
+
+    const gate = deferred();
+    const running = Array.from({ length: 2 }, () => withBrowserContext(() => gate.promise));
+    const queued = withBrowserContext(async () => "never runs");
+
+    await expect(queued).rejects.toBeInstanceOf(AppError);
+    await expect(queued).rejects.toMatchObject({ statusCode: 503 });
+
+    gate.resolve();
+    await Promise.all(running);
+  });
+
+  it("drops a queued request whose client has already disconnected", async () => {
+    const { launch, withBrowserContext } = await loadModules({ SCRAPER_MAX_CONCURRENCY: "2" });
+    const browser = createFakeBrowser();
+    launch.mockResolvedValue(browser as never);
+
+    const gate = deferred();
+    const running = Array.from({ length: 2 }, () => withBrowserContext(() => gate.promise));
+
+    const abandoned = new AbortController();
+    const queued = withBrowserContext(async () => "never runs", { signal: abandoned.signal });
+    abandoned.abort();
+
+    await expect(queued).rejects.toMatchObject({ statusCode: 503 });
+
+    gate.resolve();
+    await Promise.all(running);
+    // The decisive part: the abandoned caller never cost a browser context.
+    expect(browser.contexts).toHaveLength(2);
+  });
+
+  it("refuses immediately when the client is already gone", async () => {
+    const { launch, withBrowserContext } = await loadModules();
+    const browser = createFakeBrowser();
+    launch.mockResolvedValue(browser as never);
+
+    const gone = AbortSignal.abort();
+    await expect(withBrowserContext(async () => "nope", { signal: gone })).rejects.toMatchObject({
+      statusCode: 503,
+    });
+    expect(browser.newContext).not.toHaveBeenCalled();
+  });
+
+  it("frees the slot when a scrape outlives its timeout", async () => {
+    const { launch, withBrowserContext, AppError } = await loadModules({
+      SCRAPER_TIMEOUT_MS: "30",
+    });
+    launch.mockResolvedValue(createFakeBrowser() as never);
+
+    const hung = withBrowserContext(() => new Promise<void>(() => {}));
+    await expect(hung).rejects.toBeInstanceOf(AppError);
+    await expect(hung).rejects.toMatchObject({ statusCode: 504 });
+
+    // A held slot would make this queue forever instead of running at once.
+    await expect(withBrowserContext(async () => "next caller runs")).resolves.toBe(
+      "next caller runs"
+    );
+  });
+
+  it("reports pool capacity for diagnostics", async () => {
+    const { launch, withBrowserContext, getPoolState } = await loadModules({
+      SCRAPER_MAX_CONCURRENCY: "1",
+      SCRAPER_MAX_QUEUED: "2",
+    });
+    launch.mockResolvedValue(createFakeBrowser() as never);
+
+    expect(getPoolState()).toMatchObject({ active: 0, queued: 0, maxConcurrent: 1, maxQueued: 2 });
+
+    const gate = deferred();
+    const running = withBrowserContext(() => gate.promise);
+    await vi.waitFor(() => expect(getPoolState().active).toBe(1));
+
+    gate.resolve();
+    await running;
+  });
+
+  // Chromium does not hand memory back the way a Node heap does: after the
+  // measured burst, eight chrome-headless processes still held ~345MB with
+  // no contexts open. Recycling the browser is what reclaims it.
+  it("recycles the browser once it has served its quota and is idle", async () => {
+    const { launch, withBrowserContext } = await loadModules({
+      SCRAPER_BROWSER_RECYCLE_AFTER: "2",
+      SCRAPER_MAX_CONCURRENCY: "1",
+    });
+    const first = createFakeBrowser();
+    const second = createFakeBrowser();
+    launch.mockResolvedValueOnce(first as never).mockResolvedValueOnce(second as never);
+
+    await withBrowserContext(async () => "one");
+    expect(first.close).not.toHaveBeenCalled();
+
+    await withBrowserContext(async () => "two");
+    expect(first.close).toHaveBeenCalledTimes(1);
+
+    await withBrowserContext(async () => "three");
+    expect(second.newContext).toHaveBeenCalledTimes(1);
   });
 });

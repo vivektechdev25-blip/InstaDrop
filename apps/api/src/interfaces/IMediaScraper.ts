@@ -8,5 +8,10 @@ export interface IMediaScraper {
    * skipped silently - no attempt, no per-request failure log.
    */
   isAvailable?(): boolean;
-  extract(url: string): Promise<InstagramPost>;
+  /**
+   * `signal` is aborted when the client disconnects. A tier should use it
+   * to stop paying for work nobody is waiting for - above all to drop a
+   * queued scrape rather than hand it a browser context.
+   */
+  extract(url: string, options?: { signal?: AbortSignal }): Promise<InstagramPost>;
 }
