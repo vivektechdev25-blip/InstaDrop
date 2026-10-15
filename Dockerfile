@@ -1,3 +1,18 @@
+# Builds the API service (apps/api) image.
+#
+# Lives at the repository root, not in apps/api, for two reasons that point
+# the same way:
+#   1. Its build context MUST be the repo root - the deps stage copies
+#      packages/types and config/ - so the root is where it belongs.
+#   2. Railway uses "a Dockerfile at the root of the source directory"
+#      automatically. Keeping it here means the service needs no builder
+#      setting, no RAILWAY_DOCKERFILE_PATH variable, and no config file.
+#      Moved here 2026-10-15 after a deploy failed: Railway ignored
+#      railway.json (Config as Code is deprecated and new services cannot
+#      opt in), fell back to Railpack auto-detection, found no start command
+#      in the root package.json of a 3-package workspace, and failed the
+#      build. See docs/KNOWN_ISSUES.md.
+#
 # Base image ships Chromium + all OS-level dependencies Playwright needs -
 # Alpine's musl libc doesn't reliably run Chromium, and hand-installing the
 # Debian dependency list is exactly what this image already does for us.

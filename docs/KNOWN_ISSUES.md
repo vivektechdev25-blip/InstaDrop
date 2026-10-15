@@ -1,5 +1,38 @@
 # Known Issues
 
+## Railway ignored `railway.json` and failed the build — fixed 2026-10-15
+
+**Symptom.** Every deploy failed during build. Railway's build log showed Railpack auto-detection rather than the Dockerfile:
+
+```
+using build driver railpack-v0.41.0
+  Detected Node
+  Using pnpm package manager
+  Found workspace with 3 packages
+✗ No start command detected. Specify a start command.
+railpack prepare exited with an error
+```
+
+The root `package.json` of a three-package workspace has no `start` script and no `main`, by design — the API's entry point is `apps/api`'s. Railpack had nothing to find.
+
+**Cause.** `railway.json` declared `"builder": "DOCKERFILE"`, but Railway never read it. Per Railway's own docs, Config as Code is **deprecated**: existing files keep working until 2026-12-01, but "New services cannot opt into Config as Code." The API service was recreated recently — its public URL changed from `instadrop-production-7938` to `instadrop-production-bb00` — so it is a new service, and `railway.json` has no effect on it. With no config and no Dockerfile at the source root, Railway fell back to auto-detection.
+
+Its replacement, Infrastructure as Code (`.railway/railway.ts`), does not help here either: "Railway doesn't read `.railway/` during deploys" — it is applied through the CLI, not at build time.
+
+**Fix.** The Dockerfile now lives at the repository root, where Railway finds it without any configuration: "When building a service, Railway will look for and use a `Dockerfile` at the root of the source directory." This also matches a constraint the Dockerfile already had — its build context must be the repo root, because the deps stage copies `packages/types` and `config/`.
+
+So the service needs no builder setting, no `RAILWAY_DOCKERFILE_PATH` variable and no config file, and it survives the service being recreated again. `railway.json` is kept and updated (harmless; only older services still read it), and CI builds the same file Railway builds.
+
+**Verified** exactly as Railway builds it — root context, auto-detected root `Dockerfile`, no `-f` flag:
+
+```
+docker build -t reelsavenow-api .
+```
+
+Build succeeded with `--frozen-lockfile`; the container starts on an injected `PORT`, answers `/health` with `{"status":"ok"}`, reports the current `/download` budget (`60;w=600`), launches Chromium with the container-safe flags, contains the audio-selection fix, and exits 0 on SIGTERM.
+
+**Consequence worth knowing:** this build failure is why the audio fix appeared not to work after it was merged. No deploy had succeeded, so the old container kept serving. A deployed-commit marker on `/health` would have made that obvious immediately, and is worth adding.
+
 ## Downloaded reels had no sound in production — fixed 2026-10-15
 
 **Symptom.** Reels downloaded through the live site played video with no audio. The same reel fetched through a locally-run API produced a file with sound.
