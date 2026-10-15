@@ -5,7 +5,7 @@
 | App | Host | How it builds |
 |---|---|---|
 | `apps/web` | **Netlify** | pnpm workspace build from the repo root, Next.js via Netlify's OpenNext adapter |
-| `apps/api` | **Railway** | Docker (`apps/api/Dockerfile`), declared in `railway.json` |
+| `apps/api` | **Railway** | Docker, built from the **root `Dockerfile`** (auto-detected - see below) |
 | Postgres (Supabase) | — | **Not used.** Request logging is scaffolded but not wired in; see [DATABASE.md](./DATABASE.md) |
 
 History: the docs previously described Vercel (frontend) and Render (API, switched from Railway on 2026-08-18). The confirmed setup as of 2026-10-14 is Netlify + Railway. `render.yaml` is still in the repo but **unused** — kept only because removing deploy config is the owner's call, and recommended for removal. Nothing in the code is host-specific: the same Dockerfile runs on any container host.
@@ -45,7 +45,9 @@ Verified against Netlify's own docs on 2026-10-14 ([monorepos](https://docs.netl
 
 ### Settings
 
-From `railway.json`: builder `DOCKERFILE`, `dockerfilePath: apps/api/Dockerfile`, health check `/health` (300s timeout), restart `ON_FAILURE` ×3. The start command is the image's `CMD` (`node dist/server.js`) — `railway.json` doesn't override it.
+**The Dockerfile is found automatically.** It sits at the repository root, and Railway "will look for and use a `Dockerfile` at the root of the source directory". So the service needs **no** builder setting, **no** `RAILWAY_DOCKERFILE_PATH` variable and **no** config file. The start command is the image's `CMD` (`node dist/server.js`); leave any custom start command empty.
+
+`railway.json` is kept and points at the same file, but do not rely on it: Railway has deprecated Config as Code and **new services cannot opt into it**, which is exactly why a deploy fell back to Railpack auto-detection and failed with "No start command detected" (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)). `.railway/railway.ts` would not help either - Railway does not read it during deploys.
 
 Check in the Railway dashboard:
 - **Root directory: empty (repo root).** The Dockerfile's `deps` stage copies `packages/types` and root `config/`; a narrower build context fails with `path does not exist: tsconfig.json` (a bug already hit and fixed locally — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)).
@@ -85,7 +87,7 @@ Check in the Railway dashboard:
 corepack pnpm install --frozen-lockfile
 corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build
 
-docker build -f apps/api/Dockerfile -t reelsavenow-api .
+docker build -t reelsavenow-api .
 docker run --rm -p 4000:4000 -e CORS_ORIGIN=http://localhost:3000 reelsavenow-api
 curl -s localhost:4000/health
 ```

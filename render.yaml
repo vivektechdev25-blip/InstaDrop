@@ -29,7 +29,7 @@ services:
     # stage, and a narrower context fails with "path does not exist:
     # tsconfig.json" - a bug already hit and fixed locally, see
     # docs/KNOWN_ISSUES.md.
-    dockerfilePath: ./apps/api/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: .
 
     # Chromium is memory-hungry: it is a full browser, launched per request
