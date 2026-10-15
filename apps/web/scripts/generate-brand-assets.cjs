@@ -1,0 +1,220 @@
+#!/usr/bin/env node
+// Regenerates every brand asset in public/brand/ from the two source files
+// supplied by the owner: public/ig.png (the icon) and public/ig2.png (the
+// "Reel SAVE NOW" wordmark). Run it again whenever either source changes:
+//
+//   node apps/web/scripts/generate-brand-assets.cjs
+//
+// Resizing happens in headless Chromium's canvas, borrowed from the API
+// package's Playwright install, so the web app takes on no image-processing
+// dependency for a task that runs a handful of times a year.
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const WEB_DIR = path.join(__dirname, "..");
+const PUBLIC_DIR = path.join(WEB_DIR, "public");
+const OUT_DIR = path.join(PUBLIC_DIR, "brand");
+const OG_OUT = path.join(WEB_DIR, "src", "app", "og-wordmark.png");
+const { chromium } = require(
+  require.resolve("playwright", { paths: [path.join(WEB_DIR, "..", "api")] })
+);
+
+// The dark theme's --foreground (globals.css: `.dark { --foreground: 0 0% 98% }`).
+const DARK_TEXT = [250, 250, 250];
+
+const SQUARE_ICONS = [
+  // Transparent, filling nearly the whole square: what tabs and the
+  // Android launcher's "any" purpose show.
+  { file: "icon-32.png", size: 32, fill: 0.96 },
+  { file: "icon-48.png", size: 48, fill: 0.94 },
+  { file: "icon-192.png", size: 192, fill: 0.9 },
+  { file: "icon-512.png", size: 512, fill: 0.9 },
+  // iOS renders transparency as black, so the touch icon is opaque.
+  { file: "apple-icon.png", size: 180, fill: 0.8, background: "#ffffff" },
+  // Maskable: launchers crop to any shape inside a circle of radius 40%, so
+  // the artwork must fit within 0.8 / sqrt(2) of the side to survive it.
+  { file: "icon-maskable-512.png", size: 512, fill: 0.56, background: "#ffffff" },
+];
+
+// Header display height is 36-40px; 120px covers a 3x screen.
+const WORDMARK_HEIGHT = 120;
+// The Open Graph card is 1200x630.
+const OG_WORDMARK_HEIGHT = 220;
+
+function toDataUri(file) {
+  return `data:image/png;base64,${fs.readFileSync(path.join(PUBLIC_DIR, file)).toString("base64")}`;
+}
+
+async function main() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  const outputs = await page.evaluate(
+    async ({ iconSrc, wordmarkSrc, squareIcons, wordmarkHeight, ogHeight, darkText }) => {
+      async function load(src) {
+        const image = new Image();
+        image.src = src;
+        await image.decode();
+        return image;
+      }
+
+      /** The source's opaque bounding box, so padding is ours to decide. */
+      function trim(image) {
+        const canvas = new OffscreenCanvas(image.width, image.height);
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        const { data } = context.getImageData(0, 0, image.width, image.height);
+        let minX = image.width, minY = image.height, maxX = -1, maxY = -1;
+        for (let y = 0; y < image.height; y += 1) {
+          for (let x = 0; x < image.width; x += 1) {
+            if (data[(y * image.width + x) * 4 + 3] < 8) continue;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        const trimmed = new OffscreenCanvas(width, height);
+        trimmed.getContext("2d").drawImage(canvas, minX, minY, width, height, 0, 0, width, height);
+        return trimmed;
+      }
+
+      /**
+       * Downscales in halving steps. A single large reduction in canvas
+       * samples too few source pixels and aliases fine detail - exactly
+       * the detail that decides whether a 32px icon is still legible.
+       */
+      function scaleTo(source, width, height) {
+        let current = source;
+        while (current.width / 2 >= width && current.height / 2 >= height) {
+          const half = new OffscreenCanvas(Math.round(current.width / 2), Math.round(current.height / 2));
+          const context = half.getContext("2d");
+          context.imageSmoothingQuality = "high";
+          context.drawImage(current, 0, 0, half.width, half.height);
+          current = half;
+        }
+        const out = new OffscreenCanvas(width, height);
+        const context = out.getContext("2d");
+        context.imageSmoothingQuality = "high";
+        context.drawImage(current, 0, 0, width, height);
+        return out;
+      }
+
+      async function encode(canvas, type = "image/png") {
+        // WebP for the header wordmarks: both theme variants are in the page,
+        // so their weight lands on every first visit. Lossy at 0.92 keeps the
+        // gradient clean at a fraction of the PNG size.
+        const blob = await canvas.convertToBlob(
+          type === "image/webp" ? { type, quality: 0.92 } : { type }
+        );
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
+      }
+
+      const results = {};
+      const icon = trim(await load(iconSrc));
+
+      for (const { file, size, fill, background } of squareIcons) {
+        const scale = (size * fill) / Math.max(icon.width, icon.height);
+        const width = Math.round(icon.width * scale);
+        const height = Math.round(icon.height * scale);
+        const scaled = scaleTo(icon, width, height);
+        const square = new OffscreenCanvas(size, size);
+        const context = square.getContext("2d");
+        if (background) {
+          context.fillStyle = background;
+          context.fillRect(0, 0, size, size);
+        }
+        context.drawImage(scaled, Math.round((size - width) / 2), Math.round((size - height) / 2));
+        results[file] = await encode(square);
+      }
+
+      const wordmark = trim(await load(wordmarkSrc));
+
+      /**
+       * The dark-theme variant. Only the "SAVE NOW" lettering changes: it is
+       * the only near-black, colourless artwork in the file (measured: the
+       * icon has none, and every neutral pixel beside it is black, with
+       * anti-aliasing carried in alpha rather than grey). So those pixels
+       * become the dark theme's foreground at their original alpha, and the
+       * gradient is untouched - inverting or filtering would wreck it.
+       */
+      function recolourLettering(source) {
+        const canvas = new OffscreenCanvas(source.width, source.height);
+        const context = canvas.getContext("2d");
+        context.drawImage(source, 0, 0);
+        const image = context.getImageData(0, 0, canvas.width, canvas.height);
+        const { data } = image;
+        let changed = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] === 0) continue;
+          const max = Math.max(data[i], data[i + 1], data[i + 2]);
+          const min = Math.min(data[i], data[i + 1], data[i + 2]);
+          if (max < 64 && max - min < 30) {
+            data[i] = darkText[0];
+            data[i + 1] = darkText[1];
+            data[i + 2] = darkText[2];
+            changed += 1;
+          }
+        }
+        context.putImageData(image, 0, 0);
+        return { canvas, changed };
+      }
+
+      const wordmarkWidth = Math.round((wordmark.width * wordmarkHeight) / wordmark.height);
+      results["wordmark-light.webp"] = await encode(
+        scaleTo(wordmark, wordmarkWidth, wordmarkHeight),
+        "image/webp"
+      );
+      const dark = recolourLettering(wordmark);
+      results["wordmark-dark.webp"] = await encode(
+        scaleTo(dark.canvas, wordmarkWidth, wordmarkHeight),
+        "image/webp"
+      );
+
+      const ogWidth = Math.round((wordmark.width * ogHeight) / wordmark.height);
+      results.og = await encode(scaleTo(dark.canvas, ogWidth, ogHeight));
+
+      return {
+        files: results,
+        meta: {
+          iconTrimmed: [icon.width, icon.height],
+          wordmarkTrimmed: [wordmark.width, wordmark.height],
+          wordmarkDisplay: [wordmarkWidth, wordmarkHeight],
+          recolouredPixels: dark.changed,
+        },
+      };
+    },
+    {
+      iconSrc: toDataUri("ig.png"),
+      wordmarkSrc: toDataUri("ig2.png"),
+      squareIcons: SQUARE_ICONS,
+      wordmarkHeight: WORDMARK_HEIGHT,
+      ogHeight: OG_WORDMARK_HEIGHT,
+      darkText: DARK_TEXT,
+    }
+  );
+
+  await browser.close();
+
+  for (const [file, base64] of Object.entries(outputs.files)) {
+    const target = file === "og" ? OG_OUT : path.join(OUT_DIR, file);
+    fs.writeFileSync(target, Buffer.from(base64, "base64"));
+    const kb = (fs.statSync(target).size / 1024).toFixed(1);
+    console.log(`${path.relative(WEB_DIR, target).padEnd(40)} ${kb.padStart(6)} KB`);
+  }
+  console.log(JSON.stringify(outputs.meta));
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
