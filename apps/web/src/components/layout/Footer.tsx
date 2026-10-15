@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { siteConfig } from "@/lib/siteConfig";
 
 const LEGAL_LINKS = [
@@ -16,11 +16,8 @@ export function Footer() {
   return (
     <footer className="border-t border-border">
       <div className="container flex flex-col items-center gap-3 py-5 text-center">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Download className="h-3.5 w-3.5" />
-          </span>
-          <span className="bg-hero-gradient bg-clip-text text-lg text-transparent">{siteConfig.name}</span>
+        <Link href="/" className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <BrandLogo className="h-8" />
         </Link>
 
         <div className="flex flex-col items-center gap-1">

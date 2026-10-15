@@ -5,7 +5,18 @@ export const runtime = "edge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpengraphImage() {
+// og-wordmark.png is the dark-theme wordmark ("SAVE NOW" in the theme's
+// foreground), generated beside this file by scripts/generate-brand-assets.cjs
+// because the card's background is the dark theme's. Loaded through
+// import.meta.url so the bundler ships it with the route on any host.
+const WORDMARK_WIDTH = 638;
+const WORDMARK_HEIGHT = 220;
+
+export default async function OpengraphImage() {
+  const wordmark = await fetch(new URL("./og-wordmark.png", import.meta.url)).then((response) =>
+    response.arrayBuffer()
+  );
+
   return new ImageResponse(
     (
       <div
@@ -16,29 +27,20 @@ export default function OpengraphImage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 28,
+          gap: 36,
           backgroundColor: "#09090b",
           color: "#fafafa",
           fontFamily: "sans-serif",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 72,
-              height: 72,
-              borderRadius: 18,
-              backgroundColor: "#7c3aed",
-              fontSize: 40,
-            }}
-          >
-            ⬇
-          </div>
-          <div style={{ fontSize: 56, fontWeight: 700 }}>{siteConfig.name}</div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element -- rendered by satori, not the browser */}
+        <img
+          alt={siteConfig.name}
+          // satori accepts the raw bytes; the DOM typings only know strings.
+          src={wordmark as unknown as string}
+          width={WORDMARK_WIDTH}
+          height={WORDMARK_HEIGHT}
+        />
         <div style={{ fontSize: 30, color: "#a1a1aa", maxWidth: 860, textAlign: "center" }}>
           {siteConfig.tagline}
         </div>

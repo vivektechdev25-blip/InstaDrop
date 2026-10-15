@@ -21,9 +21,16 @@ export const metadata: Metadata = {
   // /manifest.webmanifest, not /manifest.json - confirmed live after
   // switching from the old static public/manifest.json.
   manifest: "/manifest.webmanifest",
+  // Several sizes so each consumer picks a sharp one rather than scaling a
+  // 192px image down to a 16px tab: 32 for tabs, 48 for search results
+  // (Google asks for a multiple of 48), 192 for everything larger.
   icons: {
-    icon: "/icon-192.png",
-    apple: "/apple-icon.png",
+    icon: [
+      { url: "/brand/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/icon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/brand/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: { url: "/brand/apple-icon.png", sizes: "180x180", type: "image/png" },
   },
   appleWebApp: {
     capable: true,
@@ -67,9 +74,9 @@ const APPLICATION_JSON_LD = {
   name: siteConfig.name,
   description: siteConfig.description,
   url: siteConfig.url,
-  // Real, deployed asset (apps/web/public/icon-512.png) - not a
+  // Real, deployed asset (apps/web/public/brand/icon-512.png) - not a
   // fabricated/placeholder image reference.
-  image: `${siteConfig.url}/icon-512.png`,
+  image: `${siteConfig.url}/brand/icon-512.png`,
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Any",
   offers: {

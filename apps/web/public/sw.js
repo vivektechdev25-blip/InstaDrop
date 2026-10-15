@@ -5,7 +5,11 @@
 // updated here too, not just in layout.tsx's metadata.manifest
 // reference. Cache name bumped so existing installed service workers
 // re-precache with the corrected URL rather than keeping a stale list.
-const CACHE_NAME = "reelsavenow-shell-v2";
+// v3: new logo. Assets are served cache-first, so without a new cache name
+// an installed service worker would keep showing the old icons; activate()
+// deletes every cache but this one. The new artwork also lives at new URLs
+// (/brand/...), so nothing stale can answer for it either way.
+const CACHE_NAME = "reelsavenow-shell-v3";
 const APP_SHELL_URLS = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
