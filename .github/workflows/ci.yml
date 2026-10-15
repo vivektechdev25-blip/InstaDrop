@@ -52,9 +52,17 @@ jobs:
         run: pnpm test
 
       # Builds packages/types, apps/api and apps/web in dependency order.
-      # NEXT_PUBLIC_* fall back to the code's own defaults - this checks the
-      # build, it doesn't produce a deployable artifact.
+      # This checks the build; it does not produce a deployable artifact, so
+      # the API URL is a reserved-TLD placeholder rather than the real host.
+      # It must still be a valid non-local URL: next.config.js now refuses to
+      # run a production build without one, which is what stops a deploy
+      # environment missing NEXT_PUBLIC_API_BASE_URL from silently publishing
+      # a bundle that points at localhost. Keeping CI honest about that means
+      # CI has to satisfy the same guard.
       - name: Build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.ci-placeholder.invalid/api/v1
+          NEXT_PUBLIC_SITE_URL: https://ci-placeholder.invalid
         run: pnpm build
 
   docker:

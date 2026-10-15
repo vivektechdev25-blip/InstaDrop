@@ -20,6 +20,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- **A missing deploy variable silently published a site that called `localhost` (2026-10-15).** `NEXT_PUBLIC_*` values are inlined at build time, and both call sites fell back to `http://localhost:4000/api/v1` when the variable was absent — so a deploy environment missing it produced a completely successful build whose every download failed with `ERR_CONNECTION_REFUSED`. A production build now refuses to start without a usable value (`buildEnv.cjs`, enforced from `next.config.js`), the fallback lives in exactly one module (`src/lib/apiConfig.ts`), trailing slashes are stripped so `${API_BASE_URL}/download` cannot produce `//download`, and the fallback is compiled out of production bundles. See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+- **Build errors now name a misspelled variable (2026-10-15).** The outage above was caused by `NEXT_PUBLIC_API_BASE_UR` (a missing trailing `L`), so the build failing with "it is not set" contradicted the dashboard. The guard now scans for near-miss `NEXT_PUBLIC_*` names and reports them - names only, never values.
 - **Second correctness and security pass (2026-10-14).** Root causes are in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#other-defects-found-and-fixed-on-2026-10-14).
   - **A malformed JSON body was logged raw, session cookie included, and answered 500.** It now returns a 400/413 envelope, and unknown errors log only the stack. A cookie that appears inside a library error is also redacted in the private flow.
   - **`instagram-url-direct` could block for 31 s or more before Tier 2 started**, through its default 5 retries on 403/429 plus `Retry-After`. It's now called with no retries.

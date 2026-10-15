@@ -33,9 +33,11 @@ Verified against Netlify's own docs on 2026-10-14 ([monorepos](https://docs.netl
 
 | Var | Value | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://<railway-api-domain>/api/v1` | Where the browser sends `/fetch`, `/private/fetch` and `/download`. |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://<railway-api-domain>/api/v1` | Where the browser sends `/fetch`, `/private/fetch` and `/download`. **A production build fails if this is missing or points at localhost** — see below. |
 | `NEXT_PUBLIC_SITE_URL` | `https://<netlify-production-domain>` (or the custom domain) | Canonical URLs, sitemap, OG tags. |
 | `PNPM_FLAGS` | `--shamefully-hoist` — **only if** the build fails with module-resolution errors | Documented by Netlify for Next.js + pnpm; not needed by the local build. |
+
+**The build enforces this variable (2026-10-15).** `next build` stops with an actionable error unless `NEXT_PUBLIC_API_BASE_URL` is set to an absolute, non-local http(s) URL. Before that guard existed, a missing variable produced a successful build whose every request went to `http://localhost:4000` — which is exactly what shipped to production on 2026-10-14 (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md)). If a Netlify deploy now fails with that message, the variable is missing from **that site**, in the **Production** context, with **Builds** among its scopes.
 
 **Deploy previews** are built with the same `NEXT_PUBLIC_API_BASE_URL` but are **not** in the API's CORS allowlist, by design — previews can't call the production API. If previews need a working backend, give them their own API (and their own `CORS_ORIGIN`), rather than widening production CORS to `*.netlify.app`.
 

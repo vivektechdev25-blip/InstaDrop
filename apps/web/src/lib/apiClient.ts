@@ -1,7 +1,11 @@
 import axios from "axios";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1",
+  // axios joins this with each request path ("/fetch"), collapsing the
+  // slashes between them - and apiConfig has already stripped any trailing
+  // slash, so the result is always exactly <base>/fetch.
+  baseURL: API_BASE_URL,
   // Was 15000 - measured live against the deployed Railway backend at a
   // comfortable ~4-4.5s under good conditions, but that margin isn't safe
   // for two things that stack: a slower/mobile network's extra round-trip
