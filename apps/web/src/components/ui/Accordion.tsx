@@ -29,7 +29,7 @@ export const AccordionTrigger = forwardRef<
       <AccordionPrimitive.Trigger
         ref={ref}
         className={cn(
-          "flex flex-1 items-center justify-between gap-4 py-4 text-left text-base font-medium transition-colors duration-150 ease-out hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&[data-state=open]>svg]:rotate-180",
+          "flex flex-1 items-center justify-between gap-4 py-5 text-left text-base font-semibold transition-colors duration-150 ease-out hover:text-primary data-[state=open]:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&[data-state=open]>svg]:rotate-180",
           className
         )}
         {...props}
@@ -56,10 +56,10 @@ export const AccordionContent = forwardRef<
       // still be animated - see the accordion-down/up keyframes in
       // tailwind.config.ts, same 150-300ms ease-out/ease-in convention as
       // the rest of the app's motion (Dialog, Toast).
-      className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+      className="overflow-hidden text-body data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
       {...props}
     >
-      <div className={cn("pb-4 text-muted-foreground", className)}>{children}</div>
+      <div className={cn("pb-5 pr-9 text-muted-foreground", className)}>{children}</div>
     </AccordionPrimitive.Content>
   );
 });

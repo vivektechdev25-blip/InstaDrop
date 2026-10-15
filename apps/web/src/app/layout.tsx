@@ -1,7 +1,29 @@
 import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { siteConfig } from "@/lib/siteConfig";
+
+// Downloaded at build time and served from this origin (the CSP allows
+// no third-party font hosts).
+//
+// display "optional", not "swap". Measured with Lighthouse (mobile) on the
+// production build: with swap, the font arriving re-wrapped the hero
+// headline - four or five lines at phone width - and pushed the input down,
+// a 0.248 layout shift (the limit is 0.1; the site had been at 0). With
+// optional the browser uses the font only if it is ready almost at once;
+// otherwise that visit keeps the fallback and the font is cached for the
+// next, so text never moves after it has painted.
+const fontSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  display: "optional",
+  // Not preloaded. Measured: preloading put the 28KB file on the critical
+  // path and moved First Contentful Paint from 794ms to 1059ms (Lighthouse
+  // mobile). Unpreloaded, the first paint is the fallback font with no
+  // delay; the font arrives in the background and is used from cache.
+  preload: false,
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -52,8 +74,13 @@ export const metadata: Metadata = {
   },
 };
 
+// The browser chrome follows the page: the light background, or the dark
+// theme's violet-tinted black.
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0911" },
+  ],
 };
 
 const THEME_INIT_SCRIPT = `
@@ -92,7 +119,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={fontSans.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <script

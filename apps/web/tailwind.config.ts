@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import defaultTheme from "tailwindcss/defaultTheme";
 
 const config: Config = {
   darkMode: "class",
@@ -12,7 +13,19 @@ const config: Config = {
       },
     },
     extend: {
+      // Plus Jakarta Sans, self-hosted by next/font (app/layout.tsx) - the
+      // CSP allows same-origin fonts only. Its rounded, heavy weights sit
+      // with the logo's lettering; its regular weights stay readable at
+      // body sizes, so one family covers both.
+      fontFamily: {
+        sans: ["var(--font-sans)", ...defaultTheme.fontFamily.sans],
+      },
       colors: {
+        brand: {
+          orange: "hsl(var(--brand-orange))",
+          pink: "hsl(var(--brand-pink))",
+          violet: "hsl(var(--brand-violet))",
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -55,6 +68,16 @@ const config: Config = {
       backgroundImage: {
         "hero-gradient":
           "linear-gradient(to right, hsl(var(--hero-gradient-from)), hsl(var(--hero-gradient-to)))",
+        // Filled buttons and badges carrying white text - see --cta-* in
+        // globals.css for why this is not the full three-stop logo gradient.
+        "cta-gradient": "linear-gradient(135deg, hsl(var(--cta-from)), hsl(var(--cta-to)))",
+        // The logo's own three colours, for decoration only.
+        "brand-gradient":
+          "linear-gradient(120deg, hsl(var(--brand-orange)), hsl(var(--brand-pink)) 50%, hsl(var(--brand-violet)))",
+      },
+      boxShadow: {
+        glow: "0 10px 30px -10px hsl(var(--cta-from) / 0.55)",
+        "glow-lg": "0 18px 40px -12px hsl(var(--cta-from) / 0.6)",
       },
       borderRadius: {
         // Proportional scale, not one variable derived down - bigger
@@ -81,13 +104,25 @@ const config: Config = {
         // ~54px(1024) -> 60px(1440, capped). Mobile floor barely moves
         // (40px -> ~41px) - not touched on purpose, per the scale-up pass
         // that added this comment.
+        // Revised 2026-10-15: section headings were a flat 24px under a
+        // 60px hero, so everything below the fold read as an afterthought.
+        // Section titles now scale with the viewport too, keeping the step
+        // down from the hero clear but not cliff-like.
         display: [
-          "clamp(2.5rem, 2.1rem + 2vw, 3.75rem)",
-          { lineHeight: "1.1", fontWeight: "800", letterSpacing: "-0.02em" },
+          "clamp(2.25rem, 1.55rem + 3vw, 4rem)",
+          { lineHeight: "1.05", fontWeight: "800", letterSpacing: "-0.035em" },
         ],
-        h1: ["2rem", { lineHeight: "1.2", fontWeight: "700", letterSpacing: "-0.01em" }],
-        h2: ["1.5rem", { lineHeight: "1.25", fontWeight: "700" }],
-        h3: ["1.25rem", { lineHeight: "1.3", fontWeight: "600" }],
+        h1: ["clamp(1.875rem, 1.6rem + 1.2vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "800", letterSpacing: "-0.025em" }],
+        h2: ["clamp(1.75rem, 1.45rem + 1.4vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "800", letterSpacing: "-0.03em" }],
+        h3: ["1.125rem", { lineHeight: "1.35", fontWeight: "700", letterSpacing: "-0.01em" }],
+        // Section headings inside a document (legal pages). text-h2 is sized
+        // to open a landing-page section; in running text it shouted.
+        title: ["clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem)", { lineHeight: "1.25", fontWeight: "700", letterSpacing: "-0.02em" }],
+        // Body copy in cards and descriptions: 15px, one step up from 14px
+        // text-sm, which read as fine print at the sizes it was used.
+        body: ["0.9375rem", { lineHeight: "1.65" }],
+        lead: ["clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem)", { lineHeight: "1.6" }],
+        eyebrow: ["0.75rem", { lineHeight: "1", fontWeight: "700", letterSpacing: "0.08em" }],
         // Existing Tailwind body/caption sizes (sm=14px, xs=12px) already
         // land inside the target ranges - only the line-height needed
         // fixing (was 1.43/1.33, tight enough to read as "cramped"),

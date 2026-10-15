@@ -2,131 +2,222 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Brand palette, sampled from the logo itself (public/ig.png) rather than
+ * chosen by eye - 2026-10-15, hue histogram of its saturated pixels:
+ *   orange  #FB750A (27deg)   - the clapperboard's top
+ *   pink    #F30362 (336deg)  - the dominant hue, ~26% of the artwork
+ *   violet  #7003BB (276deg)  - the bottom-left
+ * Every text/background pairing below was then tuned per theme and measured
+ * against WCAG 2.x (see docs/DESIGN_SYSTEM.md for the ratios): the same hue
+ * needs a darker stop on white and a lighter one on near-black.
+ */
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
+    --foreground: 260 25% 8%;
 
-    /* Was identical to --background (0 0% 100%) - cards had zero fill-color
-       separation from the page and relied entirely on a 1px border +
-       shadow-sm to read as a distinct surface. This is a real but subtle
-       step down, not a visible gray box. */
-    --card: 240 20% 98%;
-    --card-foreground: 240 10% 4%;
+    /* A whisper of the brand pink, so cards separate from the page without
+       reading as grey boxes. */
+    --card: 330 40% 98.5%;
+    --card-foreground: 260 25% 8%;
 
-    /* Elevation tier above --card, for modals/dialogs - brighter than card
-       in light mode (elevated content can read as "brighter"), lighter
-       than card in dark mode (see .dark below), matching standard
-       dark-theme elevation convention. */
     --surface-elevated: 0 0% 100%;
-    --surface-elevated-foreground: 240 10% 4%;
+    --surface-elevated-foreground: 260 25% 8%;
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted: 330 20% 96%;
+    --muted-foreground: 250 8% 42%;
 
-    --border: 240 6% 90%;
-    --ring: 262 83% 58%;
+    --border: 330 15% 90%;
 
-    --primary: 262 83% 58%;
+    /* Brand pink for text, icons, rings and tints: 5.14:1 on white. */
+    --primary: 336 92% 44%;
     --primary-foreground: 0 0% 100%;
+    --ring: 336 92% 44%;
 
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 4%;
+    --secondary: 330 20% 96%;
+    --secondary-foreground: 260 25% 8%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
+    --success: 142 71% 36%;
     --success-foreground: 0 0% 100%;
 
-    /* Proportional radius scale (bigger surface = bigger radius) replacing
-       the old single --radius variable that every size was derived from -
-       see tailwind.config.ts for why. */
     --radius-sm: 0.5rem;
-    --radius-md: 0.625rem;
-    --radius-lg: 1rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1.25rem;
 
-    /* Hero headline gradient (bg-hero-gradient in tailwind.config.ts) +
-       the second, smaller glow blob behind the hero - stays in the
-       primary's neighboring hues (blue-violet -> magenta) rather than
-       jumping across the wheel. Confirmed live 2026-08-05 via WCAG
-       relative-luminance calculation: worst-case stop is 3.87:1 against
-       white, which clears the 3:1 large-text minimum (the hero heading
-       is 40-48px/800 weight, so it qualifies as large text under WCAG,
-       not the stricter 4.5:1 normal-text bar). */
-    --hero-gradient-from: 255 85% 58%;
-    --hero-gradient-to: 295 75% 55%;
+    /* The logo gradient for large text (headings): each stop >= 3:1 on
+       white - 4.14, 4.95 and 7.10:1. */
+    --brand-text-from: 24 95% 42%;
+    --brand-text-via: 336 92% 45%;
+    --brand-text-to: 276 85% 44%;
+
+    /* Buttons. Separate from --primary because a filled button carries
+       white text in both themes, so its stops must stay dark enough for
+       that (4.76 and 6.39:1) whatever the page behind it is. */
+    --cta-from: 336 92% 46%;
+    --cta-to: 282 85% 44%;
+
+    /* The logo's own colours, at full strength - decorative only (glows,
+       hairlines), never behind or as text. */
+    --brand-orange: 27 97% 51%;
+    --brand-pink: 336 98% 48%;
+    --brand-violet: 276 97% 37%;
+
+    /* Kept for the existing hero-gradient utility name. */
+    --hero-gradient-from: var(--brand-text-from);
+    --hero-gradient-to: var(--brand-text-to);
   }
 
   .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
+    /* Near-black with a violet cast, so the dark theme belongs to the logo
+       rather than reading as generic zinc. */
+    --background: 265 30% 5%;
+    --foreground: 300 10% 97%;
 
-    --card: 240 9% 7%;
-    --card-foreground: 0 0% 98%;
+    --card: 265 22% 8%;
+    --card-foreground: 300 10% 97%;
 
-    /* Lighter than --card, not darker - dark-theme elevation convention:
-       content floating above the page gets progressively lighter. */
-    --surface-elevated: 240 8% 10%;
-    --surface-elevated-foreground: 0 0% 98%;
+    --surface-elevated: 265 20% 11%;
+    --surface-elevated-foreground: 300 10% 97%;
 
-    --muted: 240 6% 14%;
-    --muted-foreground: 240 5% 65%;
+    --muted: 265 15% 13%;
+    --muted-foreground: 260 10% 68%;
 
-    --border: 240 6% 16%;
-    --ring: 262 83% 65%;
+    --border: 265 15% 17%;
 
-    /* 65% lightness measured 4.19:1 contrast against white text - confirmed
-       live via Lighthouse + independent WCAG relative-luminance
-       calculation, both agreeing exactly. Below the 4.5:1 AA minimum for
-       normal text - a genuine, pre-existing bug on every primary button
-       in dark mode, just never caught before now. 63% passes at ~4.6:1
-       with a small margin, while staying close to the original color. */
-    --primary: 262 83% 63%;
-    --primary-foreground: 0 0% 100%;
+    /* 6.84:1 on the dark background. A filled surface in this colour takes
+       dark text (--primary-foreground), never white. */
+    --primary: 336 95% 68%;
+    --primary-foreground: 265 30% 8%;
+    --ring: 336 95% 68%;
 
-    --secondary: 240 6% 14%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 265 15% 13%;
+    --secondary-foreground: 300 10% 97%;
 
-    --destructive: 0 72% 56%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 80% 62%;
+    --destructive-foreground: 265 30% 8%;
 
-    --success: 142 65% 50%;
-    --success-foreground: 0 0% 100%;
+    --success: 142 60% 52%;
+    --success-foreground: 265 30% 8%;
 
-    /* Lighter than the light-mode stops - confirmed live: worst-case
-       5.08:1 against the near-black dark background, clearing 3:1 (and
-       4.5:1) comfortably. Light/dark need independently-tuned stops here,
-       not a shared value - the luminance direction needed is opposite
-       (light mode needs dark-enough text, dark mode needs light-enough
-       text), same reasoning as --primary's own light/dark split. */
-    --hero-gradient-from: 255 85% 68%;
-    --hero-gradient-to: 300 70% 68%;
+    /* 9.17, 6.32 and 8.00:1 on the dark background. */
+    --brand-text-from: 30 97% 60%;
+    --brand-text-via: 336 95% 65%;
+    --brand-text-to: 285 90% 74%;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Balanced line breaks for page titles only: the hero used to break as
+     "...videos in / original quality". text-wrap is a layout cost paid by
+     every element it applies to - measured on the production build (4x
+     CPU), balance on every heading plus text-wrap: pretty on every
+     paragraph and text-rendering: optimizeLegibility roughly doubled page
+     layout time and delayed first paint, for no visible gain on headings
+     that fit on one line anyway. */
+  h1 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.22);
   }
 }
 
-/* HowItWorks/FeatureList/Faq fade in via framer-motion's whileInView,
-   which needs a real, rendered intermediate scroll frame to fire its
-   IntersectionObserver - confirmed live that print rendering (Ctrl+P /
-   Save as PDF) never produces one, since the whole page is laid out for
-   print without ever scrolling. Without this override, those three
-   sections print/export as blank space (stuck at their opacity:0 initial
-   state) even though their content is present in the DOM. Print is the
-   one confirmed-reachable real path for this - normal scrolling (wheel,
-   touch, trackpad, even a keyboard "End" press) reliably fires the
-   observer, verified separately. */
+@layer components {
+  /* Gradient text with a solid fallback: a browser without
+     background-clip:text would otherwise paint transparent text. */
+  .text-brand-gradient {
+    color: hsl(var(--primary));
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--brand-text-from)),
+      hsl(var(--brand-text-via)) 55%,
+      hsl(var(--brand-text-to))
+    );
+  }
+
+  @supports (-webkit-background-clip: text) or (background-clip: text) {
+    .text-brand-gradient {
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  }
+}
+
+/*
+ * Scroll reveal (see components/motion/ScrollReveal.tsx).
+ *
+ * Content is visible by default. Nothing is hidden unless JavaScript has
+ * run, the reader has started scrolling, and reduced motion is off - at
+ * that point ScrollReveal arms the page and only elements still below the
+ * viewport wait for their entrance. So the page reads complete with no
+ * JavaScript, before hydration, in print, to crawlers and full-page
+ * screenshot tools, and if IntersectionObserver never fires.
+ *
+ * This replaced framer-motion's whileInView, which server-rendered every
+ * marketing section at opacity:0: measured 2026-10-15, a full-page capture
+ * without scrolling showed ~1,500px of empty page between hero and footer.
+ */
+[data-reveal] {
+  transition:
+    opacity 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: calc(var(--reveal-order, 0) * 70ms);
+}
+
+html[data-reveal-armed] [data-reveal][data-reveal-pending] {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    transition: none;
+  }
+
+  html[data-reveal-armed] [data-reveal][data-reveal-pending] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media print {
-  [data-scroll-reveal] {
+  html[data-reveal-armed] [data-reveal][data-reveal-pending] {
     opacity: 1 !important;
     transform: none !important;
+  }
+}
+
+/* SVG strokes that draw themselves in when their reveal container arrives
+   (pathLength=1 on the path, so the dash maths is the same at any size). */
+.reveal-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s;
+}
+
+html[data-reveal-armed] [data-reveal-pending] .reveal-draw {
+  stroke-dashoffset: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-draw {
+    transition: none;
   }
 }
