@@ -4,10 +4,10 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Download, Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { useTheme } from "@/hooks/useTheme";
-import { siteConfig } from "@/lib/siteConfig";
 import { cn } from "@/lib/utils";
 
 // Pulls in framer-motion - not needed until a mobile visitor opens the
@@ -32,11 +32,8 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       <nav className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Download className="h-4 w-4" />
-          </span>
-          <span className="bg-hero-gradient bg-clip-text text-h3 text-transparent">{siteConfig.name}</span>
+        <Link href="/" className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <BrandLogo className="h-9 sm:h-10" />
         </Link>
 
         <div className="hidden items-center gap-6 md:flex">
