@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { DownloaderPage } from "@/components/downloader/DownloaderPage";
+import { DownloadGuide } from "@/components/marketing/DownloadGuide";
 import { FAQ_ENTRIES } from "@/components/marketing/faqData";
 import { extractFromQueryParam } from "@/lib/urlParser";
 
@@ -41,7 +42,8 @@ export function generateMetadata({ searchParams }: HomePageProps): Metadata {
   // exist for every Instagram URL ever shared, which is not something
   // search engines should crawl or index.
   if (extractFromQueryParam(searchParams)) {
-    return { robots: { index: false, follow: false } };
+    // No canonical either - see app/private/page.tsx.
+    return { robots: { index: false, follow: false }, alternates: { canonical: null } };
   }
   return {};
 }
@@ -63,6 +65,10 @@ export default function HomePage({ searchParams }: HomePageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
       />
       <HowItWorks />
+      {/* A server component - static HTML, no hydration chunk - so it is
+          imported directly rather than through dynamic() like the
+          client sections around it. */}
+      <DownloadGuide />
       <FeatureList />
       <Faq />
     </DownloaderPage>

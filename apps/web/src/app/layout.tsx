@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { siteConfig } from "@/lib/siteConfig";
@@ -14,15 +14,26 @@ import { siteConfig } from "@/lib/siteConfig";
 // optional the browser uses the font only if it is ready almost at once;
 // otherwise that visit keeps the fallback and the font is cached for the
 // next, so text never moves after it has painted.
-const fontSans = Plus_Jakarta_Sans({
+//
+// Not preloaded. Measured: preloading put the font file on the critical
+// path and moved First Contentful Paint from 794ms to 1059ms (Lighthouse
+// mobile). Unpreloaded, the first paint is the fallback font with no
+// delay; the fonts arrive in the background and are used from cache.
+const fontSans = Inter({
   subsets: ["latin"],
   display: "optional",
-  // Not preloaded. Measured: preloading put the 28KB file on the critical
-  // path and moved First Contentful Paint from 794ms to 1059ms (Lighthouse
-  // mobile). Unpreloaded, the first paint is the fallback font with no
-  // delay; the font arrives in the background and is used from cache.
   preload: false,
   variable: "--font-sans",
+});
+
+// Headings only, so only the weight the heading tokens use
+// (tailwind.config.ts): one small file rather than the variable font.
+const fontDisplay = Inter_Tight({
+  subsets: ["latin"],
+  weight: "700",
+  display: "optional",
+  preload: false,
+  variable: "--font-display",
 });
 
 export const metadata: Metadata = {
@@ -119,7 +130,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={fontSans.variable} suppressHydrationWarning>
+    <html lang="en" className={`${fontSans.variable} ${fontDisplay.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <script

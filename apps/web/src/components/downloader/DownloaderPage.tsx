@@ -28,7 +28,7 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
       <Navbar />
 
       <main className="flex-1">
-        <section className="container relative flex flex-col items-center gap-6 overflow-hidden pb-8 pt-12 text-center sm:gap-7 sm:pb-10 sm:pt-20">
+        <section className="container relative flex flex-col items-center gap-6 overflow-hidden pb-8 pt-8 text-center sm:gap-7 sm:pb-10 sm:pt-12">
           {/* The logo's three colours as soft light behind the hero: violet
               at the centre, pink and orange either side, the way they sit in
               the artwork.
@@ -71,12 +71,12 @@ export function DownloaderPage({ initialUrl, children }: DownloaderPageProps) {
             </span>
           </h1>
 
-          <p className="max-w-xl text-lead text-muted-foreground">
+          <p className="max-w-2xl text-lead text-muted-foreground">
             Paste a public Instagram link and get a direct, high-resolution download —
             no account required.
           </p>
 
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-3xl">
             <InputForm initialUrl={initialUrl} />
           </div>
 

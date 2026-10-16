@@ -88,9 +88,5 @@ export function ScrollReveal() {
   return null;
 }
 
-/** Props that mark an element for reveal; `order` staggers siblings. */
-export function reveal(order = 0): { "data-reveal": ""; style?: React.CSSProperties } {
-  return order > 0
-    ? { "data-reveal": "", style: { "--reveal-order": order } as React.CSSProperties }
-    : { "data-reveal": "" };
-}
+// Kept importable from here for existing callers; see reveal.ts.
+export { reveal } from "./reveal";
