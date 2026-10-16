@@ -8,10 +8,6 @@ const LEGAL_LINKS = [
   { href: "/contact", label: "Contact Us" },
 ];
 
-// Plain text, deliberately not links - ReelSaveNow is one unified flow, not
-// separate per-content-type pages, so these shouldn't imply otherwise.
-const SUPPORTED_CONTENT = "Photos · Reels · Videos · Carousels";
-
 export function Footer() {
   return (
     <footer className="relative border-t border-border">
@@ -22,6 +18,8 @@ export function Footer() {
           <BrandLogo className="h-8" />
         </Link>
 
+        {/* What ReelSaveNow supports used to be listed here; it now has
+            its own page, /support, linked from the header. */}
         <div className="flex flex-col items-center gap-1">
           <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-2 text-sm text-muted-foreground">
             {LEGAL_LINKS.map((link) => (
@@ -40,11 +38,6 @@ export function Footer() {
               </Link>
             ))}
           </nav>
-
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supports</span>
-            <p className="text-sm text-muted-foreground">{SUPPORTED_CONTENT}</p>
-          </div>
         </div>
 
         <div className="w-full max-w-xs border-t border-border" aria-hidden="true" />

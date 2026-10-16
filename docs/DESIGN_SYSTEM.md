@@ -29,8 +29,9 @@ Sampled from the logo artwork (`public/ig.png`), not chosen by eye — a hue his
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--background` | `#ffffff` | `#0c0911` (violet-tinted black) | page |
-| `--primary` | `#d7095c` — 5.14:1 | `#fb609e` — 6.84:1 | brand text, icons, rings, tints |
+| `--background` | `#fefbfc` (blush) + logo-colour wash | `#0c0911` (violet-tinted black) | page |
+| `--card` | `#ffffff` | `#141019` | cards sit on the page |
+| `--primary` | `#c50855` (336° 92% 41%) | `#fb609e` — 6.84:1 | brand text, icons, rings, tints |
 | `--cta-from` → `--cta-to` | `#e10960` → `#9611d0` | same | filled buttons and badges; white label at 4.76 / 6.39:1 in both themes |
 | `--brand-text-*` (3 stops) | `#d15705` `#dc095e` `#8311d0` | `#fc9936` `#fb5195` `#db81f8` | gradient headings (large text, ≥3:1) |
 | `--muted-foreground` | `#656374` — 5.85:1 | `#aba5b6` — 8.27:1 | secondary text |
@@ -40,19 +41,23 @@ Rules that follow from the measurements:
 
 - **A filled button is `bg-cta-gradient` with white text**, never `bg-primary`: in dark mode `--primary` is light enough for text on the page, so a filled `--primary` surface needs dark text (`--primary-foreground`).
 - **Gradient text uses `.text-brand-gradient`**, which falls back to solid `--primary` where `background-clip: text` is unsupported, so text is never transparent.
-- **Hero glow is radial gradients, not blurred shapes.** Worst case — all three glows stacked at full strength — still leaves muted text at 4.66:1 in both themes. Re-check if the opacities change.
+- **Glows are radial gradients, never blurred shapes or fixed backgrounds** - measured as expensive here.
+- **Light theme: one page-wide wash on `<body>`** (amber top-left, pink top-right, violet lower down), with the hero's own faint glow on top. Behind the centred hero the two together leave the grey subtext at 5.2:1 (375px) and 5.5:1 (1440px). Light `--primary` is 41% rather than 44% so small pink text keeps 4.5:1 over the wash. **Dark theme: the hero glow**, unchanged.
+- **How contrast over the wash is checked:** axe-core cannot judge text over a gradient and reports it as "needs review". Every text element is instead measured against the pixels painted behind its glyphs (screenshot with text shown vs hidden, glyph pixels only, real viewport). 2026-10-16: every text element passes AA in both themes; the only lower values are disabled buttons, which WCAG exempts.
 
 ## Typography
 
-Plus Jakarta Sans, self-hosted by `next/font` (the CSP allows no third-party font hosts) with `display: "optional"` and no preload. Measured on the production build with Lighthouse (mobile): `swap` let the arriving font re-wrap the hero headline and push the input down — a 0.248 layout shift, where the site had been at 0 — and preloading put the font on the critical path. With `optional`, a visit that does not have the font almost immediately keeps the metric-matched fallback, and the font is used from cache on the next one.
+**Inter** for text, **Inter Tight** for headings (2026-10-16; was Plus Jakarta Sans, whose heavy 800 headings read as chunky rather than refined). Inter Tight is Inter drawn narrower for display sizes, so headings sit tight without letters colliding and the pair reads as one family. Headings get it through their size tokens (`globals.css` maps `text-display`, `text-h1`, `text-h2`, `text-h3`, `text-title` to `font-display`), all at 700 - the only Inter Tight weight loaded. Any other heading, such as an accordion trigger, stays in Inter at its own weight rather than being drawn as a synthetic bold.
+
+Both are self-hosted by `next/font` (the CSP allows no third-party font hosts) with `display: "optional"` and no preload. Measured on the production build with Lighthouse (mobile): `swap` let the arriving font re-wrap the hero headline and push the input down — a 0.248 layout shift, where the site had been at 0 — and preloading put the font on the critical path. With `optional`, a visit that does not have the font almost immediately keeps the metric-matched fallback, and the font is used from cache on the next one. Weight on the wire: Inter (variable) 47KB plus Inter Tight 700 22KB, against 28KB for Jakarta; with no preload and `optional` it stays off the critical path - CLS 0, Lighthouse mobile 88 (87-89; earlier runs on this machine 82-90).
 
 | Token | Size | Weight | Use |
 |---|---|---|---|
-| `text-display` | clamp 36 → 64px | 800, −0.035em | hero h1 |
-| `text-h1` | clamp 30 → 40px | 800 | page titles |
-| `text-h2` | clamp 28 → 40px | 800, −0.03em | landing-page section titles |
-| `text-title` | clamp 22 → 26px | 700 | section headings inside documents (legal pages) |
-| `text-h3` | 18px | 700 | card and step titles |
+| `text-display` | clamp 36 → 64px | 700, −0.04em | hero h1 |
+| `text-h1` | clamp 30 → 40px | 700, −0.03em | page titles |
+| `text-h2` | clamp 28 → 40px | 700, −0.035em | landing-page section titles |
+| `text-title` | clamp 22 → 26px | 700, −0.025em | section headings inside documents (legal pages) |
+| `text-h3` | 18px | 700, −0.015em | card and step titles |
 | `text-lead` | clamp 17 → 19px | — | hero subtext |
 | `text-body` | 15px / 1.65 | — | card and FAQ body copy |
 | `text-eyebrow` | 12px, uppercase | 700, 0.08em | section labels |
@@ -66,9 +71,18 @@ Plus Jakarta Sans, self-hosted by `next/font` (the CSP allows no third-party fon
 - Nothing is hidden until the reader scrolls. No JavaScript, slow hydration, print, crawlers and screenshot tools all see the complete page.
 - When it arms, only elements still entirely below the viewport wait for their entrance, so nothing already seen flickers.
 - Reduced motion or no IntersectionObserver: it never arms.
-- `opacity` and `transform` only, 0.55s, staggered 70ms via `--reveal-order`. SVG strokes with `.reveal-draw` draw in after their container.
+- `opacity` and `transform` only: 28px rise over 0.7s, staggered 80ms via `--reveal-order` (raised from 18px / 0.55s / 70ms, which read as a flicker). SVG strokes with `.reveal-draw` draw in after their container.
+- `reveal()` lives in `components/motion/reveal.ts`, a plain module, so server components (the step-by-step guide) can use it; `ScrollReveal.tsx` is a client module and re-exports it.
 
 Removing framer-motion from the marketing sections also cut the home route's first-load JavaScript from 179KB to 144KB.
+
+## Layout width (2026-10-16)
+
+Container: 1360px from 2xl (was 1200px), 1.5rem gutters on phones and 2rem from lg. Measured before the change: at 1920px the widest content block was 1024px, 53% of the screen. Sections now use the width - a two-column FAQ, a three-column feature grid up to 1280px wide - while paragraphs keep their own max-width so line length stays readable.
+
+The hero stays one centred column (a split hero with an illustration beside the form was tried and dropped in review). It is wider than before: the subtext is `max-w-2xl` and the input row `max-w-3xl` (768px, was 672px). The headline keeps `max-w-4xl` - at 1024px it breaks into the same three lines, so the extra width would only be empty space.
+
+The step-by-step guide (`DownloadGuide`) illustrates three ways to get a link - the Instagram app, a desktop browser, the address-bar shortcut - with no Instagram screenshots, logo or Meta marks, and no copies of Instagram's own screens or menus. All three methods use photo-realistic images generated for this site (Figma AI, 2026-10-16): a hand holding a phone, a laptop on a desk, and hands typing on a laptop, each screen showing a gradient video preview and a download button, no text or logos. They live in `public/guide/` as WebP at 720px and 1280px wide (15-56KB each), served with `srcset`, intrinsic `width`/`height` (no layout shift) and `loading="lazy"`; a phone or a 1440px screen fetches the 720px file, a 2x desktop the 1280px one. The address-bar photo carries a floating card with the exact text to type (`reelsavenow.com/` + the link, then Enter) as real text, since a generated image can't be trusted to spell.
 
 ## Typography (before 2026-10-15)
 
@@ -111,7 +125,7 @@ Proportional scale — bigger surfaces get a bigger radius, replacing the old sy
 
 | Element | Token |
 |---|---|
-| Button, Input, DialogClose, icon badges (InstallModal icon) | `rounded-md` |
+| Button, Input, the dialog close button, icon badges (InstallModal icon) | `rounded-md` |
 | Card, DialogContent, Toast | `rounded-lg` |
 | MediaViewer (nested inside PreviewCard) | `rounded-md` — one step down from its parent card, standard nesting convention |
 | Carousel nav buttons, avatars | `rounded-full` |

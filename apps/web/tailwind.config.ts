@@ -5,20 +5,32 @@ const config: Config = {
   darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
+    // 1360px from 2xl up (was 1200px). Measured 2026-10-16: at 1920px the
+    // widest content block was 1024px, 53% of the screen, with ~450px empty
+    // on each side. Sections now use the width; paragraphs keep their own
+    // max-width, so line length stays readable however wide this gets.
+    // Mobile keeps its 1.5rem gutter; the wider gutters are in globals.css.
+    // They can't live here: the container plugin applies per-breakpoint
+    // padding only at its own `screens`, and with just 2xl listed an `lg`
+    // entry was silently never applied - every screen under 1360px had the
+    // 1.5rem phone gutter.
     container: {
       center: true,
       padding: "1.5rem",
       screens: {
-        "2xl": "1200px",
+        "2xl": "1360px",
       },
     },
     extend: {
-      // Plus Jakarta Sans, self-hosted by next/font (app/layout.tsx) - the
-      // CSP allows same-origin fonts only. Its rounded, heavy weights sit
-      // with the logo's lettering; its regular weights stay readable at
-      // body sizes, so one family covers both.
+      // Inter for text and Inter Tight for headings, both self-hosted by
+      // next/font (app/layout.tsx) - the CSP allows same-origin fonts only.
+      // Inter Tight is Inter drawn narrower for large sizes, so headings
+      // can be set tight without the letters colliding, and the two read
+      // as one family. Headings pick it up through their size tokens
+      // (globals.css), not through a class of their own.
       fontFamily: {
         sans: ["var(--font-sans)", ...defaultTheme.fontFamily.sans],
+        display: ["var(--font-display)", "var(--font-sans)", ...defaultTheme.fontFamily.sans],
       },
       colors: {
         brand: {
@@ -108,16 +120,18 @@ const config: Config = {
         // 60px hero, so everything below the fold read as an afterthought.
         // Section titles now scale with the viewport too, keeping the step
         // down from the hero clear but not cliff-like.
+        // Headings are Inter Tight at 700 - the one weight loaded for it -
+        // with tracking that tightens as the size grows.
         display: [
           "clamp(2.25rem, 1.55rem + 3vw, 4rem)",
-          { lineHeight: "1.05", fontWeight: "800", letterSpacing: "-0.035em" },
+          { lineHeight: "1.05", fontWeight: "700", letterSpacing: "-0.04em" },
         ],
-        h1: ["clamp(1.875rem, 1.6rem + 1.2vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "800", letterSpacing: "-0.025em" }],
-        h2: ["clamp(1.75rem, 1.45rem + 1.4vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "800", letterSpacing: "-0.03em" }],
-        h3: ["1.125rem", { lineHeight: "1.35", fontWeight: "700", letterSpacing: "-0.01em" }],
+        h1: ["clamp(1.875rem, 1.6rem + 1.2vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "700", letterSpacing: "-0.03em" }],
+        h2: ["clamp(1.75rem, 1.45rem + 1.4vw, 2.5rem)", { lineHeight: "1.15", fontWeight: "700", letterSpacing: "-0.035em" }],
+        h3: ["1.125rem", { lineHeight: "1.35", fontWeight: "700", letterSpacing: "-0.015em" }],
         // Section headings inside a document (legal pages). text-h2 is sized
         // to open a landing-page section; in running text it shouted.
-        title: ["clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem)", { lineHeight: "1.25", fontWeight: "700", letterSpacing: "-0.02em" }],
+        title: ["clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem)", { lineHeight: "1.25", fontWeight: "700", letterSpacing: "-0.025em" }],
         // Body copy in cards and descriptions: 15px, one step up from 14px
         // text-sm, which read as fine print at the sizes it was used.
         body: ["0.9375rem", { lineHeight: "1.65" }],

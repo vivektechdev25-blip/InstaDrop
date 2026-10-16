@@ -6,7 +6,7 @@
 - Never expose secrets or API keys.
 - Never trust frontend validation — always validate on the backend (Zod schemas in `apps/api/src/validators`).
 - Never log sensitive information (cookies, tokens, credentials).
-- IP addresses hashed with SHA-256 + a daily rotating salt before storage — this describes the *intended* design of `requestLogRepository`/`RequestLog` (schema and insert logic are fully implemented), **not current active behavior**: confirmed via a full-codebase grep (2026-08-05, while fact-checking the legal pages overhaul) that nothing in `apps/api` actually calls `requestLogRepository.insert()` — no controller or middleware is wired up to it. Request logging is not currently happening at all. Wiring it up is tracked as a separate follow-up, not bundled into any pass so far. See [docs/FEATURES.md](./FEATURES.md#legal-pages-structured-sectioned-sidebar-navigation--2026-08-05) for where this was caught.
+- No request logging and no IP storage at all. An anonymous request-log design (IPs hashed with SHA-256 + a daily rotating salt) was scaffolded early on but never called — caught 2026-08-05 while fact-checking the legal pages (see [docs/FEATURES.md](./FEATURES.md#legal-pages-structured-sectioned-sidebar-navigation--2026-08-05)) — and the unused code was removed on 2026-10-16. If logging is ever built, the hashing rule above is the requirement.
 
 ## Rate limiting
 
@@ -149,7 +149,7 @@ Recommended approach: **session cookie, own content only**. Options evaluated:
 - Detect and handle expired sessions with a clear `SESSION_EXPIRED` error — **done and confirmed live.** A well-formed-but-fake `sessionCookie` sent against a real reel URL correctly returned `401 SESSION_EXPIRED`, confirming the `/accounts/login/` redirect-detection path fires against real Instagram, not just in code review.
 
 **Log-redaction, confirmed live, not assumed:**
-- `apps/api/src/repositories/requestLogRepository.ts` is unused dead code — confirmed via `grep` across the codebase, nothing calls it. `RequestLog`'s own DB columns are `hashed_ip`/`endpoint`/`status_code`/`id`/`created_at` only — there is no column a raw cookie value could land in even if it were wired up.
+- There is no database or request log for a cookie value to land in: the never-called `requestLogRepository` (whose columns were `hashed_ip`/`endpoint`/`status_code`/`id`/`created_at` only) was removed as dead code on 2026-10-16.
 - `apps/api/src/app.ts` has no request-body-logging middleware.
 - Zod's `flatten().fieldErrors`, which `errorHandler.ts` returns for validation failures, was confirmed via direct script execution to contain only static validation message strings — never the submitted field value — so a malformed-cookie request never echoes the cookie back in its own error response.
 - `privateContentService.ts` wraps its Playwright/extraction logic in a try/catch that raises sanitized `AppError`s (`SESSION_EXPIRED`/`ACCESS_DENIED`/a generic server error) before anything reaches `errorHandler.ts`'s catch-all `console.error` — an unexpected internal exception (which could theoretically stringify a value containing the cookie in some edge case) never gets a bare, unsanitized log line at that final layer.

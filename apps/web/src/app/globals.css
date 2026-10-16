@@ -14,12 +14,13 @@
  */
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    /* A barely-there blush instead of pure white, with white cards on top:
+       the light theme's version of the dark theme's tinted black, and the
+       way cards separate from the page without reading as grey boxes. */
+    --background: 330 60% 99%;
     --foreground: 260 25% 8%;
 
-    /* A whisper of the brand pink, so cards separate from the page without
-       reading as grey boxes. */
-    --card: 330 40% 98.5%;
+    --card: 0 0% 100%;
     --card-foreground: 260 25% 8%;
 
     --surface-elevated: 0 0% 100%;
@@ -30,10 +31,12 @@
 
     --border: 330 15% 90%;
 
-    /* Brand pink for text, icons, rings and tints: 5.14:1 on white. */
-    --primary: 336 92% 44%;
+    /* Brand pink for text, icons, rings and tints. 41% lightness rather
+       than 44%: the page now carries a soft wash (body, below), and the
+       extra depth keeps small pink text at 4.5:1 or better over it. */
+    --primary: 336 92% 41%;
     --primary-foreground: 0 0% 100%;
-    --ring: 336 92% 44%;
+    --ring: 336 92% 41%;
 
     --secondary: 330 20% 96%;
     --secondary-foreground: 260 25% 8%;
@@ -122,6 +125,37 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  /* Headings take Inter Tight through their size tokens, so every heading
+     on every page changes together. Only these tokens: they are all set at
+     700, the one weight loaded. A bare h3 (an accordion trigger, say) keeps
+     Inter at its own weight rather than being drawn bold. */
+  .text-display,
+  .text-h1,
+  .text-h2,
+  .text-h3,
+  .text-title {
+    @apply font-display;
+  }
+
+  /* Light theme: the logo's colours as a very soft wash over the page -
+     amber top-left, pink top-right, violet lower down. The hero keeps its
+     own faint glow on top of it; measured 2026-10-16 behind the centred
+     hero, the two together leave its smallest grey text at 5.2:1 or more.
+
+     Each colour sits in its own region so no point carries all three at
+     full strength. Radial gradients only: no filter: blur() and no
+     background-attachment: fixed, both measured as expensive here. The
+     sizes are fixed lengths, so the wash looks the same on a short page
+     and a long one. */
+  html:not(.dark) body {
+    background-image:
+      radial-gradient(900px 640px at 6% -4%, hsl(var(--brand-orange) / 0.045), transparent 70%),
+      radial-gradient(860px 620px at 96% 6%, hsl(var(--brand-pink) / 0.045), transparent 70%),
+      radial-gradient(1100px 760px at 18% 62%, hsl(var(--brand-violet) / 0.035), transparent 70%),
+      radial-gradient(900px 700px at 90% 96%, hsl(var(--brand-pink) / 0.03), transparent 70%);
+    background-repeat: no-repeat;
+  }
+
   /* Balanced line breaks for page titles only: the hero used to break as
      "...videos in / original quality". text-wrap is a layout cost paid by
      every element it applies to - measured on the production build (4x
@@ -139,6 +173,30 @@
 }
 
 @layer components {
+  /* Page gutters, growing with the screen (tailwind.config.ts explains why
+     they are here and not in the container config). Measured 2026-10-16: on
+     a 1280px laptop the content ran to 24px from each edge. */
+  @media (min-width: 768px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 3rem;
+      padding-right: 3rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .container {
+      padding-left: 4rem;
+      padding-right: 4rem;
+    }
+  }
+
   /* Gradient text with a solid fallback: a browser without
      background-clip:text would otherwise paint transparent text. */
   .text-brand-gradient {
@@ -174,16 +232,19 @@
  * marketing section at opacity:0: measured 2026-10-15, a full-page capture
  * without scrolling showed ~1,500px of empty page between hero and footer.
  */
+/* Distance and duration raised slightly (18px / 0.55s -> 28px / 0.7s) so
+   the entrance reads as intended rather than as a flicker, still one short
+   ease-out per element. */
 [data-reveal] {
   transition:
-    opacity 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),
-    transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
-  transition-delay: calc(var(--reveal-order, 0) * 70ms);
+    opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: calc(var(--reveal-order, 0) * 80ms);
 }
 
 html[data-reveal-armed] [data-reveal][data-reveal-pending] {
   opacity: 0;
-  transform: translateY(18px);
+  transform: translateY(28px);
 }
 
 @media (prefers-reduced-motion: reduce) {

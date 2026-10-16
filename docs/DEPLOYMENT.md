@@ -6,7 +6,7 @@
 |---|---|---|
 | `apps/web` | **Netlify** | pnpm workspace build from the repo root, Next.js via Netlify's OpenNext adapter |
 | `apps/api` | **Railway** | Docker, built from the **root `Dockerfile`** (auto-detected - see below) |
-| Postgres (Supabase) | — | **Not used.** Request logging is scaffolded but not wired in; see [DATABASE.md](./DATABASE.md) |
+| Postgres (Supabase) | — | **Not used.** There is no database; the unwired request-log scaffold was removed 2026-10-16, see [DATABASE.md](./DATABASE.md) |
 
 History: the docs previously described Vercel (frontend) and Render (API, switched from Railway on 2026-08-18). The confirmed setup as of 2026-10-14 is Netlify + Railway. `render.yaml` is still in the repo but **unused** — kept only because removing deploy config is the owner's call, and recommended for removal. Nothing in the code is host-specific: the same Dockerfile runs on any container host.
 
@@ -59,7 +59,7 @@ Check in the Railway dashboard:
 |---|---|---|
 | `PORT` | Set by Railway | Validated at startup (integer 1–65535) — a malformed value used to become `NaN`, which Node treats as "any free port". Defaults to `4000`. The server binds `0.0.0.0`; a loopback-only bind is unreachable from outside the container. |
 | `CORS_ORIGIN` | **Yes** | Comma-separated **exact** origins, e.g. `https://<netlify-production-domain>,https://<custom-domain>`. Validated at startup: a trailing slash, path, mixed-case host or `*` fails the boot with the exact value to use, instead of silently never matching the browser's `Origin` header. Unset → `http://localhost:3000` (fails safe, never a wildcard). |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No** | Only read by `requestLogRepository.ts`, which nothing imports. Don't set them. |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | **No** | Nothing reads them any more (the code that did was removed 2026-10-16). If they are still set on a host, they are harmless and can be deleted there. |
 | `SCRAPER_MAX_CONCURRENCY` | **No** | How many browser contexts may run at once. Default `1`. Measured 2026-10-15 in a 512MB container under a 20-request burst: `1` peaks at 337MB (66%), `2` peaks at 504MB (98%). Raise to `2` only on an instance with 1GB or more. |
 | `SCRAPER_MAX_QUEUED` | **No** | How many requests may wait for a slot. Default `3`. Deeper queues mean callers waiting past the frontend's own 30s timeout, for work nobody is still there to receive. |
 | `SCRAPER_QUEUE_WAIT_MS` | **No** | How long a queued request waits before getting a 503. Default `10000`. |

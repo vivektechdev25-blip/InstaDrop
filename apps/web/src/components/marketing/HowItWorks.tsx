@@ -79,7 +79,7 @@ export function HowItWorks() {
         </p>
       </div>
 
-      <div className="relative mx-auto mt-12 max-w-4xl sm:mt-14">
+      <div className="relative mx-auto mt-12 max-w-5xl sm:mt-14">
         {/* Arc connectors, lg:+ only. Below lg, the composition falls back to
             a flat, unconnected 3-column row (sm:-lg:) or a stacked single
             column (below sm:) - neither can sensibly hold curved paths. They
@@ -159,7 +159,7 @@ export function HowItWorks() {
 
       <div
         {...reveal(5)}
-        className="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-4 rounded-lg border border-primary/20 bg-card px-6 py-5 text-center shadow-sm sm:flex-row sm:justify-between sm:rounded-full sm:py-4 sm:text-left"
+        className="mx-auto mt-10 flex max-w-3xl flex-col items-center gap-4 rounded-lg border border-primary/20 bg-card px-6 py-5 text-center shadow-sm sm:flex-row sm:justify-between sm:rounded-full sm:py-4 sm:text-left"
       >
         <div className="flex flex-col items-center gap-3 sm:flex-row">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cta-gradient text-white shadow-glow">
