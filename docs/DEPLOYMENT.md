@@ -67,6 +67,8 @@ Check in the Railway dashboard:
 | `DOWNLOAD_MAX_CONCURRENCY` | **No** | Transfers `/download` runs at once before answering 503. Default `32` — inside the measured-safe range (40 stalled clients peaked at 94MB). |
 | `DOWNLOAD_IDLE_TIMEOUT_MS` | **No** | A transfer whose upstream sends nothing for this long is cut off. Default `30000`. |
 | `DOWNLOAD_MAX_BYTES` | **No** | Largest file relayed. Default 300MB. |
+| `FFMPEG_PATH` | **No** | ffmpeg used to join a video-only file to its separate audio stream. Default `ffmpeg` on `PATH`; the Docker image installs it. Without it, those videos download silent. |
+| `DOWNLOAD_MUX_TIMEOUT_MS` | **No** | How long the join may take before the video is sent alone. Default `60000`. |
 | `TRUST_PROXY` | **No** | Leave unset. Overrides which forwarding hops are trusted: an integer is a hop count, otherwise a comma-separated list of names/CIDRs. The default trusts every non-public address and keys on the right-most public one — see SECURITY.md. |
 | `RAILWAY_GIT_COMMIT_SHA` | Set by Railway | Not set by hand. Reported by `/health` as `commit`, which is how a deploy is verified. |
 | `SCRAPER_BROWSER_RECYCLE_AFTER` | **No** | Contexts served before the idle browser is relaunched to reclaim memory Chromium does not return. Default `40`. |

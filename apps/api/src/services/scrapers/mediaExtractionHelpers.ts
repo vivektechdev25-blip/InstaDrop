@@ -120,6 +120,69 @@ export async function findProgressiveVideoUrls(page: Page): Promise<string[]> {
   return [...new Set(urls)];
 }
 
+/**
+ * The audio-only streams listed in the page's DASH manifest, best first.
+ *
+ * Measured 2026-10-16: from a datacenter network (production, Railway)
+ * Instagram can offer no rendition with both picture and sound - every
+ * `video_versions` entry and every captured stream was video-only - so
+ * picking the right file is not enough. The page data still carries a
+ * `video_dash_manifest` (MPD XML) whose audio AdaptationSet points at a
+ * separate AAC stream; the download service joins that to the video.
+ * It is read from the page data rather than captured off the network,
+ * because the muted autoplay never requests the audio at all.
+ *
+ * Best-effort like the function above: an empty array when there is no
+ * manifest, no audio set, or the XML does not parse.
+ */
+export async function findDashAudioUrls(page: Page): Promise<string[]> {
+  // String body for the same reason as readPageMeta().
+  const urls = await page.evaluate<string[]>(`
+    (() => {
+      const scripts = Array.from(
+        document.querySelectorAll('script[type="application/json"][data-sjs]')
+      );
+      const found = [];
+
+      function readManifest(xmlText) {
+        const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+        if (xml.querySelector("parsererror")) return;
+        for (const set of Array.from(xml.getElementsByTagName("AdaptationSet"))) {
+          const setType = (set.getAttribute("contentType") || set.getAttribute("mimeType") || "").toLowerCase();
+          for (const rep of Array.from(set.getElementsByTagName("Representation"))) {
+            const type = setType + " " + (rep.getAttribute("mimeType") || "").toLowerCase();
+            if (!type.includes("audio")) continue;
+            const base = rep.getElementsByTagName("BaseURL")[0];
+            const url = base && base.textContent ? base.textContent.trim() : "";
+            if (!/^https:\\/\\//.test(url)) continue;
+            found.push({ url, bandwidth: Number(rep.getAttribute("bandwidth")) || 0 });
+          }
+        }
+      }
+
+      function walk(node, depth) {
+        if (depth > 14 || node === null || typeof node !== "object") return;
+        if (typeof node.video_dash_manifest === "string") {
+          try { readManifest(node.video_dash_manifest); } catch {}
+        }
+        for (const key of Object.keys(node)) walk(node[key], depth + 1);
+      }
+
+      for (const script of scripts) {
+        try {
+          walk(JSON.parse(script.textContent || ""), 0);
+        } catch {
+          // Not every data-sjs tag is JSON we care about.
+        }
+      }
+      found.sort((a, b) => b.bandwidth - a.bandwidth);
+      return found.map((entry) => entry.url);
+    })()
+  `);
+
+  return [...new Set(urls.map(stripByteRangeParams))];
+}
+
 
 // An MP4's track list lives in the `moov` box. Instagram's progressive files
 // are faststart (moov before mdat, measured at ~36KB), so the first chunk is
@@ -271,6 +334,66 @@ export async function selectVideoUrlWithAudio(
   progressiveCandidates: string[],
   capturedCandidates: string[]
 ): Promise<string | null> {
+  const { muxed, chosen } = await rankVideoCandidates(progressiveCandidates, capturedCandidates);
+  return muxed ?? chosen;
+}
+
+/** What the page offers as a video, and whether the picked file has sound. */
+export interface VideoSelection {
+  url: string;
+  /** Set only when `url` has no audio track and a separate stream was found. */
+  audioUrl?: string;
+}
+
+/**
+ * selectVideoUrlWithAudio(), plus a fallback for when no file has both
+ * tracks: pair the best video-only file with a separate audio-only stream -
+ * from the DASH manifest first, then any captured stream measured to be
+ * audio-only - for the download service to join. Each audio candidate is
+ * probed: it must hold an audio track and no video, so a mislabelled
+ * stream can never stand in for the sound.
+ */
+export async function selectVideoAndAudio(
+  progressiveCandidates: string[],
+  capturedCandidates: string[],
+  dashAudioCandidates: string[]
+): Promise<VideoSelection | null> {
+  const { muxed, chosen, ranked } = await rankVideoCandidates(progressiveCandidates, capturedCandidates);
+  if (muxed) return { url: muxed };
+  if (!chosen) return null;
+
+  let audioUrl: string | undefined;
+  for (const url of dashAudioCandidates.slice(0, MAX_AUDIO_PROBES)) {
+    const tracks = await probeMp4Tracks(url);
+    if (tracks !== null && tracks.video === 0 && tracks.audio > 0) {
+      audioUrl = url;
+      break;
+    }
+  }
+  audioUrl ??= ranked.find(
+    (entry) => entry.tracks !== null && entry.tracks.video === 0 && entry.tracks.audio > 0
+  )?.url;
+
+  console.warn(
+    audioUrl
+      ? "[mediaExtraction] pairing the video-only file with a separate audio stream; the download will join them"
+      : `[mediaExtraction] no separate audio stream found either (${dashAudioCandidates.length} in the DASH manifest); the video will be silent`
+  );
+  return audioUrl ? { url: chosen, audioUrl } : { url: chosen };
+}
+
+interface CandidateRanking {
+  /** The first candidate with both a video and an audio track. */
+  muxed: string | null;
+  /** The best fallback when there is no muxed candidate. */
+  chosen: string | null;
+  ranked: RankedCandidate[];
+}
+
+async function rankVideoCandidates(
+  progressiveCandidates: string[],
+  capturedCandidates: string[]
+): Promise<CandidateRanking> {
   const ranked: RankedCandidate[] = [];
 
   // Progressive renditions first: they are h264+aac and play anywhere, while
@@ -282,7 +405,7 @@ export async function selectVideoUrlWithAudio(
 
   for (const { url, progressive } of ordered) {
     const tracks = await probeMp4Tracks(url);
-    if (tracks !== null && tracks.video > 0 && tracks.audio > 0) return url;
+    if (tracks !== null && tracks.video > 0 && tracks.audio > 0) return { muxed: url, chosen: url, ranked };
     ranked.push({ url, tracks, progressive });
   }
 
@@ -306,7 +429,7 @@ export async function selectVideoUrlWithAudio(
     );
   }
 
-  return chosen?.url ?? null;
+  return { muxed: null, chosen: chosen?.url ?? null, ranked };
 }
 export function stripByteRangeParams(videoUrl: string): string {
   const parsed = new URL(videoUrl);

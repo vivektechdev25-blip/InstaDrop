@@ -9,8 +9,9 @@ import {
   NOT_FOUND_MARKER,
   readPageMeta,
   findProgressiveVideoUrls,
+  findDashAudioUrls,
   MAX_CAPTURED_MEDIA,
-  selectVideoUrlWithAudio,
+  selectVideoAndAudio,
   stripByteRangeParams,
   findFullResolutionImage,
   extractCoverDate,
@@ -209,14 +210,24 @@ async function extractOwnPrivateContent(
   const slideImageUrls = await collectCarouselSlides(page, coverDate, primaryImageUrl);
 
   // Same audio-verified selection as the public tier.
-  const videoUrl =
+  const video =
     slideImageUrls.length === 1
-      ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), [...capturedMediaUrls])
+      ? await selectVideoAndAudio(
+          await findProgressiveVideoUrls(page),
+          [...capturedMediaUrls],
+          await findDashAudioUrls(page)
+        )
       : null;
 
   const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
-    videoUrl
-      ? { type: "video", url: videoUrl, thumbnail: imageUrl, dimensions }
+    video
+      ? {
+          type: "video",
+          url: video.url,
+          ...(video.audioUrl ? { audioUrl: video.audioUrl } : {}),
+          thumbnail: imageUrl,
+          dimensions,
+        }
       : { type: "image", url: imageUrl, thumbnail: imageUrl, dimensions }
   );
 
