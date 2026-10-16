@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { LegalSection } from "@/components/legal/LegalSection";
+import { formatLegalDate, TERMS_UPDATED } from "@/lib/legalDates";
 import { siteConfig } from "@/lib/siteConfig";
 
 export const metadata: Metadata = {
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
 };
 
-const LAST_UPDATED = "August 5, 2026";
+// Shared with sitemap.ts, which reports it as this page's <lastmod>.
+const LAST_UPDATED = formatLegalDate(TERMS_UPDATED);
 
 const SECTIONS = [
   { id: "agreement", label: "Agreement to These Terms" },

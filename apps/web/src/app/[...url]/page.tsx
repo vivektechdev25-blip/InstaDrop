@@ -7,6 +7,10 @@ import { extractFromCatchAllPath } from "@/lib/urlParser";
 // otherwise match it, so it must never be crawled or indexed.
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
+  // noindex, so no canonical either: the root layout's canonical ("/") would
+  // otherwise be inherited, and "don't index me" plus "my canonical is the
+  // home page" are contradictory signals.
+  alternates: { canonical: null },
 };
 
 interface CatchAllPageProps {
