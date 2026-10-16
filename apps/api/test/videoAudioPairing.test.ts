@@ -85,6 +85,31 @@ describe("selectVideoAndAudio", () => {
     expect(warn.mock.calls.some(([line]) => String(line).includes("no separate audio stream found"))).toBe(true);
   });
 
+  // Tells "the reel is silent" apart from "Instagram muted it for this server".
+  it("adds Instagram's own audio flags to the log when no sound is found", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubProbes({ [VIDEO_ONLY]: ["vide"] });
+    const describe = vi.fn(async () => "instagram says: has_audio=true should_mute_audio=true");
+    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [], describe)).resolves.toEqual({ url: VIDEO_ONLY });
+    expect(describe).toHaveBeenCalledOnce();
+    expect(warn.mock.calls.some(([line]) => String(line).includes("should_mute_audio=true"))).toBe(true);
+  });
+
+  it("never fails the request because the flags could not be read", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubProbes({ [VIDEO_ONLY]: ["vide"] });
+    const broken = vi.fn(async () => Promise.reject(new Error("page closed")));
+    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [], broken)).resolves.toEqual({ url: VIDEO_ONLY });
+  });
+
+  it("does not read the flags when audio was found", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubProbes({ [VIDEO_ONLY]: ["vide"], [DASH_AUDIO]: ["soun"] });
+    const describe = vi.fn(async () => "unused");
+    await selectVideoAndAudio([VIDEO_ONLY], [], [DASH_AUDIO], describe);
+    expect(describe).not.toHaveBeenCalled();
+  });
+
   it("returns null when there is no video at all", async () => {
     stubProbes({});
     await expect(selectVideoAndAudio([], [], [DASH_AUDIO])).resolves.toBeNull();

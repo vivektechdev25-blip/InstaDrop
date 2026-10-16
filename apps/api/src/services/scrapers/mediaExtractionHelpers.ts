@@ -356,7 +356,9 @@ export interface VideoSelection {
 export async function selectVideoAndAudio(
   progressiveCandidates: string[],
   capturedCandidates: string[],
-  dashAudioCandidates: string[]
+  dashAudioCandidates: string[],
+  /** Extra detail for the log when no sound is found anywhere. */
+  describeAudio?: () => Promise<string>
 ): Promise<VideoSelection | null> {
   const { muxed, chosen, ranked } = await rankVideoCandidates(progressiveCandidates, capturedCandidates);
   if (muxed) return { url: muxed };
@@ -374,12 +376,55 @@ export async function selectVideoAndAudio(
     (entry) => entry.tracks !== null && entry.tracks.video === 0 && entry.tracks.audio > 0
   )?.url;
 
+  if (audioUrl) {
+    console.warn("[mediaExtraction] pairing the video-only file with a separate audio stream; the download will join them");
+    return { url: chosen, audioUrl };
+  }
+
+  const detail = describeAudio ? await describeAudio().catch(() => "audio flags unreadable") : null;
   console.warn(
-    audioUrl
-      ? "[mediaExtraction] pairing the video-only file with a separate audio stream; the download will join them"
-      : `[mediaExtraction] no separate audio stream found either (${dashAudioCandidates.length} in the DASH manifest); the video will be silent`
+    `[mediaExtraction] no separate audio stream found either (${dashAudioCandidates.length} in the DASH manifest); the video will be silent` +
+      (detail ? `; ${detail}` : "")
   );
-  return audioUrl ? { url: chosen, audioUrl } : { url: chosen };
+  return { url: chosen };
+}
+
+/**
+ * Instagram's own word on whether this page may play sound, for the log
+ * line above. Measured 2026-10-16: a reel with licensed music
+ * (`music_info` set) had sound and an audio stream from India, while
+ * production (US) got video-only files and a manifest with no audio. The
+ * page data carries `has_audio`, `should_mute_audio` and
+ * `should_mute_audio_reason`; logging them tells "the reel is silent"
+ * apart from "Instagram muted it for this server". Booleans, a short
+ * reason string and whether licensed music is attached - no URLs.
+ */
+export async function describeAudioAvailability(page: Page): Promise<string> {
+  // String body for the same reason as readPageMeta().
+  return page.evaluate<string>(`
+    (() => {
+      const found = {};
+      const keys = ["has_audio", "should_mute_audio", "should_mute_audio_reason", "should_mute_audio_reason_type"];
+      let licensedMusic = false;
+      function walk(node, depth) {
+        if (depth > 18 || node === null || typeof node !== "object") return;
+        for (const key of Object.keys(node)) {
+          if (keys.includes(key) && !(key in found)) found[key] = node[key];
+          if (key === "music_asset_info" && node[key]) licensedMusic = true;
+          walk(node[key], depth + 1);
+        }
+      }
+      for (const script of document.querySelectorAll('script[type="application/json"][data-sjs]')) {
+        try { walk(JSON.parse(script.textContent || ""), 0); } catch {}
+      }
+      const parts = keys.filter((key) => key in found).map((key) => {
+        const value = found[key];
+        return key + "=" + (typeof value === "string" ? JSON.stringify(value.slice(0, 120)) : String(value));
+      });
+      parts.push("licensed_music=" + licensedMusic);
+      return "instagram says: " + parts.join(" ");
+    })()
+  `);
 }
 
 interface CandidateRanking {
