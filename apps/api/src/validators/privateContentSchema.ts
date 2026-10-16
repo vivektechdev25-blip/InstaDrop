@@ -30,5 +30,3 @@ export const privateContentSchema = z.object({
   // (/stories/{username}/{id}/) this regex was never written to match.
   url: fetchMediaSchema.shape.url,
 });
-
-export type PrivateContentInput = z.infer<typeof privateContentSchema>;

@@ -21,5 +21,3 @@ export const downloadMediaSchema = z.object({
     }),
   filename: z.string().min(1).max(255),
 });
-
-export type DownloadMediaInput = z.infer<typeof downloadMediaSchema>;

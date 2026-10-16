@@ -22,7 +22,8 @@ Backend API — Railway (Express, Docker; the image's Playwright base ships Node
       |
       v
 Data & Infra Layer
-  `-- (none in use)           Supabase request logging is scaffolded but not wired in;
+  `-- (none in use)           No database (the never-wired Supabase request-log
+                              scaffold was removed 2026-10-16);
                               no edge caching is configured (an earlier s-maxage plan
                               was never implemented)
       |
@@ -89,7 +90,6 @@ siteConfig.ts
 ### Backend
 - Node.js 20 LTS + Express.js (TypeScript)
 - `express-rate-limit` (in-memory) for rate limiting
-- Supabase PostgreSQL for audit/anonymous request logs only
 - Hosting: Netlify (frontend) + Railway (backend API, Dockerized) — see [DEPLOYMENT.md](./DEPLOYMENT.md)
 - PNPM monorepo workspace
 
@@ -135,12 +135,11 @@ usePWAInstall()  <-- the only public interface; everything below is an implement
                                     localStorage need.
 
 components/pwa/
-  |-- InstallModal.tsx   The popup. Built on the existing Dialog primitive
-  |                      (components/ui/Dialog.tsx) rather than a hand-rolled overlay,
-  |                      specifically to inherit its focus trap, aria-modal, and
-  |                      Escape-to-dismiss for free.
-  `-- InstallButton.tsx  Reusable trigger (renders nothing when there's no captured
-                         prompt to trigger) - usable standalone, not just inside the modal.
+  `-- InstallModal.tsx   The popup. Built on the existing Dialog primitive
+                         (components/ui/Dialog.tsx) rather than a hand-rolled overlay,
+                         specifically to inherit its focus trap, aria-modal, and
+                         Escape-to-dismiss for free. (A standalone InstallButton was
+                         built but never mounted; removed 2026-10-16 as dead code.)
 ```
 
 **Data flow:** `beforeinstallprompt` fires -> `pwaService.ts` captures it (via `event.preventDefault()`, deferring Chrome's native mini-infobar) and hands the event to `usePWAInstall` -> the hook asks `installPromptManager.shouldShowPrompt()` whether policy allows showing it right now -> `InstallModal` waits an additional ~2.5s show-delay past eligibility, then opens -> Accept calls `event.prompt()` and persists an "installed" flag; Dismiss ("Maybe Later", Escape, overlay click, or the dialog's own close button all count) records a dismissal and starts a cooldown (3 days or 3 visits, whichever elapses first) before the modal is eligible to reappear, up to a hard cap of 3 dismissals after which the user is treated as permanently opted out.

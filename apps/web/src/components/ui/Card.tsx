@@ -48,24 +48,8 @@ export const CardTitle = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLHea
   }
 );
 
-export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
-  function CardDescription({ className, ...props }, ref) {
-    return (
-      <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
-    );
-  }
-);
-
 export const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   function CardContent({ className, ...props }, ref) {
     return <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />;
-  }
-);
-
-export const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  function CardFooter({ className, ...props }, ref) {
-    return (
-      <div ref={ref} className={cn("flex items-center p-6 pt-0", className)} {...props} />
-    );
   }
 );

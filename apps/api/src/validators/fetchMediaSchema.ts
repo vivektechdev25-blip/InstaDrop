@@ -8,5 +8,3 @@ export const fetchMediaSchema = z.object({
       message: "URL must be a public Instagram post, reel, or IGTV link.",
     }),
 });
-
-export type FetchMediaInput = z.infer<typeof fetchMediaSchema>;
