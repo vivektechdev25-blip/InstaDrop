@@ -10,6 +10,7 @@ import {
   readPageMeta,
   findProgressiveVideoUrls,
   findDashAudioUrls,
+  describeAudioAvailability,
   MAX_CAPTURED_MEDIA,
   selectVideoAndAudio,
   stripByteRangeParams,
@@ -149,7 +150,8 @@ export const playwrightTier: IMediaScraper = {
           ? await selectVideoAndAudio(
               await findProgressiveVideoUrls(page),
               [...capturedMediaUrls],
-              await findDashAudioUrls(page)
+              await findDashAudioUrls(page),
+              () => describeAudioAvailability(page)
             )
           : null;
 
