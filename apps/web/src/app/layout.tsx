@@ -124,6 +124,17 @@ const APPLICATION_JSON_LD = {
   },
 };
 
+// The name Google shows above the title in search results. Without it,
+// Google guesses the site name from the page - which is how results kept
+// showing the old "ReelSaveHub" name after the rename.
+const WEBSITE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: siteConfig.name,
+  alternateName: "Reel Save Now",
+  url: siteConfig.url,
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -136,6 +147,10 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(APPLICATION_JSON_LD) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
         />
       </head>
       <body>
