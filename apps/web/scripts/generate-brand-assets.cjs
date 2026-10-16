@@ -212,9 +212,57 @@ async function main() {
     console.log(`${path.relative(WEB_DIR, target).padEnd(40)} ${kb.padStart(6)} KB`);
   }
   console.log(JSON.stringify(outputs.meta));
+  writeFavicon();
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// public/favicon.ico, built from the 32px and 48px icons above. Browsers use
+// the <link rel="icon"> tags, but crawlers - Google's favicon in search
+// results among them - also request /favicon.ico directly, and without a
+// file there the address-bar route answers it with an HTML page.
+const FAVICON_OUT = path.join(PUBLIC_DIR, "favicon.ico");
+const FAVICON_SOURCES = ["icon-32.png", "icon-48.png"];
+
+/** Wraps PNG images in an ICO container (ICO allows PNG entries as-is). */
+function buildIco(images) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(images.length, 4);
+
+  const entries = [];
+  let offset = 6 + 16 * images.length;
+  for (const { size, png } of images) {
+    const entry = Buffer.alloc(16);
+    entry.writeUInt8(size >= 256 ? 0 : size, 0); // width (0 means 256)
+    entry.writeUInt8(size >= 256 ? 0 : size, 1); // height
+    entry.writeUInt8(0, 2); // no palette
+    entry.writeUInt8(0, 3); // reserved
+    entry.writeUInt16LE(1, 4); // colour planes
+    entry.writeUInt16LE(32, 6); // bits per pixel
+    entry.writeUInt32LE(png.length, 8);
+    entry.writeUInt32LE(offset, 12);
+    entries.push(entry);
+    offset += png.length;
+  }
+  return Buffer.concat([header, ...entries, ...images.map((image) => image.png)]);
+}
+
+function writeFavicon() {
+  const images = FAVICON_SOURCES.map((file) => {
+    const png = fs.readFileSync(path.join(OUT_DIR, file));
+    // A PNG's width sits at byte 16 of its IHDR chunk.
+    return { size: png.readUInt32BE(16), png };
+  });
+  fs.writeFileSync(FAVICON_OUT, buildIco(images));
+  const kb = (fs.statSync(FAVICON_OUT).size / 1024).toFixed(1);
+  console.log(`${path.relative(WEB_DIR, FAVICON_OUT).padEnd(40)} ${kb.padStart(6)} KB`);
+}
+
+module.exports = { buildIco, writeFavicon };
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
