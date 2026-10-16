@@ -8,8 +8,8 @@ export async function downloadMediaController(
   next: NextFunction
 ) {
   try {
-    const { url, filename } = downloadMediaSchema.parse(req.query);
-    await downloadService.streamToResponse(url, filename, res);
+    const { url, filename, audio } = downloadMediaSchema.parse(req.query);
+    await downloadService.streamToResponse(url, filename, res, audio);
   } catch (error) {
     next(error);
   }

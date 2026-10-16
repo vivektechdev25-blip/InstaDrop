@@ -20,4 +20,14 @@ export const downloadMediaSchema = z.object({
       message: "URL must be a direct Instagram CDN media link.",
     }),
   filename: z.string().min(1).max(255),
+  // A separate audio stream to join to a video-only `url` (see
+  // selectVideoAndAudio). Held to the same CDN allowlist as `url`.
+  audio: z
+    .string()
+    .max(4096)
+    .url()
+    .refine(isAllowedCdnUrlString, {
+      message: "Audio URL must be a direct Instagram CDN media link.",
+    })
+    .optional(),
 });

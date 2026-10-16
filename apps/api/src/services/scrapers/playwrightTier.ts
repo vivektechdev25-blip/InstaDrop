@@ -9,8 +9,9 @@ import {
   NOT_FOUND_MARKER,
   readPageMeta,
   findProgressiveVideoUrls,
+  findDashAudioUrls,
   MAX_CAPTURED_MEDIA,
-  selectVideoUrlWithAudio,
+  selectVideoAndAudio,
   stripByteRangeParams,
   findFullResolutionImage,
   extractCoverDate,
@@ -140,15 +141,27 @@ export const playwrightTier: IMediaScraper = {
       // reliable enough to build on top of - carousels are treated as
       // image-only until that's verified against a real multi-slide post.
       // Probes the candidates for a real audio track rather than trusting
-      // the first one - see selectVideoUrlWithAudio().
-      const videoUrl =
+      // the first one, and when no file has both, pairs the video with the
+      // separate audio stream from the DASH manifest - see
+      // selectVideoAndAudio().
+      const video =
         slideImageUrls.length === 1
-          ? await selectVideoUrlWithAudio(await findProgressiveVideoUrls(page), [...capturedMediaUrls])
+          ? await selectVideoAndAudio(
+              await findProgressiveVideoUrls(page),
+              [...capturedMediaUrls],
+              await findDashAudioUrls(page)
+            )
           : null;
 
       const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
-        videoUrl
-          ? { type: "video", url: videoUrl, thumbnail: imageUrl, dimensions }
+        video
+          ? {
+              type: "video",
+              url: video.url,
+              ...(video.audioUrl ? { audioUrl: video.audioUrl } : {}),
+              thumbnail: imageUrl,
+              dimensions,
+            }
           : { type: "image", url: imageUrl, thumbnail: imageUrl, dimensions }
       );
 

@@ -1,5 +1,11 @@
 import type { Response } from "express";
+import { spawn } from "node:child_process";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Readable, Transform, type TransformCallback } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { AppError } from "../errors/AppError";
 import { isAllowedCdnUrlString } from "../constants/allowedCdnHosts";
 
@@ -118,11 +124,18 @@ async function fetchMediaFollowingSafeRedirects(sourceUrl: string): Promise<glob
   );
 }
 
-async function streamToResponse(
-  sourceUrl: string,
-  filename: string,
-  res: Response
-): Promise<void> {
+interface Upstream {
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  /** Null when the upstream sent none, or sent one that counts compressed bytes. */
+  contentLength: string | null;
+}
+
+/**
+ * Opens an allowlisted media URL, following only allowlisted redirects, and
+ * refuses anything that is not media or is larger than the download cap.
+ */
+async function openUpstream(sourceUrl: string): Promise<Upstream> {
   let upstreamResponse: globalThis.Response;
 
   try {
@@ -168,6 +181,16 @@ async function streamToResponse(
     ? null
     : upstreamResponse.headers.get("content-length");
 
+  return { body: upstreamResponse.body, contentType, contentLength };
+}
+
+async function streamToResponse(
+  sourceUrl: string,
+  filename: string,
+  res: Response
+): Promise<void> {
+  const { body, contentType, contentLength } = await openUpstream(sourceUrl);
+
   res.setHeader("Content-Type", contentType);
   res.setHeader(
     "Content-Disposition",
@@ -181,7 +204,7 @@ async function streamToResponse(
   // mismatch between the DOM lib's ReadableStream (needed for Playwright's
   // page.evaluate typings elsewhere) and Node's own stream/web type for the
   // same runtime object.
-  const nodeStream = Readable.fromWeb(upstreamResponse.body as never);
+  const nodeStream = Readable.fromWeb(body as never);
   const guard = createTransferGuard();
 
   await new Promise<void>((resolve, reject) => {
@@ -261,6 +284,176 @@ function createTransferGuard(): Transform {
   return guard;
 }
 
+// Joining a video-only file to its separate audio stream (see
+// selectVideoAndAudio in the scrapers). ffmpeg copies both tracks into one
+// MP4 without re-encoding - quick, lossless, and light on CPU.
+const FFMPEG_PATH = process.env.FFMPEG_PATH?.trim() || "ffmpeg";
+const MUX_TIMEOUT_MS = readPositiveInt(process.env.DOWNLOAD_MUX_TIMEOUT_MS, 60_000);
+let ffmpegMissingLogged = false;
+
+/** Downloads one allowlisted media URL to a file, under the same limits as a direct transfer. */
+async function downloadToFile(sourceUrl: string, filePath: string, signal: AbortSignal): Promise<void> {
+  const { body } = await openUpstream(sourceUrl);
+  await pipeline(Readable.fromWeb(body as never), createTransferGuard(), createWriteStream(filePath), { signal });
+}
+
+type MuxResult = { ok: true } | { ok: false; missing: boolean; detail: string };
+
+/** Runs ffmpeg on local files only - it never sees a URL. */
+function runFfmpeg(args: string[], signal: AbortSignal): Promise<MuxResult> {
+  return new Promise((resolve) => {
+    let stderr = "";
+    let settled = false;
+    const finish = (result: MuxResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+
+    // No shell: the arguments are passed as-is, so no path can be read as a command.
+    const child = spawn(FFMPEG_PATH, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish({ ok: false, missing: false, detail: `timed out after ${MUX_TIMEOUT_MS}ms` });
+    }, MUX_TIMEOUT_MS);
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      finish({ ok: false, missing: false, detail: "client went away" });
+    };
+    signal.addEventListener("abort", onAbort);
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (stderr.length < 2000) stderr += chunk.toString();
+    });
+    child.on("error", (error: NodeJS.ErrnoException) =>
+      finish({ ok: false, missing: error.code === "ENOENT", detail: error.message })
+    );
+    child.on("close", (code) =>
+      finish(code === 0 ? { ok: true } : { ok: false, missing: false, detail: `exit ${code}: ${stderr.trim().slice(-300)}` })
+    );
+  });
+}
+
+/** Sends a finished local file, with its exact length. */
+async function sendFile(filePath: string, filename: string, res: Response): Promise<void> {
+  const { size } = await stat(filePath);
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(filename)}"`);
+  res.setHeader("Content-Length", String(size));
+
+  await new Promise<void>((resolve, reject) => {
+    const file = createReadStream(filePath);
+    let isSettled = false;
+    const settle = (error?: Error) => {
+      if (isSettled) return;
+      isSettled = true;
+      if (error) reject(error);
+      else resolve();
+    };
+    file.on("error", (error) => {
+      res.destroy(error);
+      settle(error);
+    });
+    res.on("finish", () => settle());
+    res.on("close", () => {
+      file.destroy();
+      settle();
+    });
+    file.pipe(res);
+  });
+}
+
+/**
+ * Joins a video-only file and a separate audio stream into one MP4 and
+ * sends it. Both are fetched in full first (to a private temp folder,
+ * always removed afterwards), so the result can be written as a normal
+ * faststart MP4 - which every phone, messaging app and desktop player
+ * handles - and so a failure is reported as an error before anything is
+ * sent, never as a "finished" file that is broken.
+ *
+ * If the audio cannot be fetched or ffmpeg is unavailable or fails, the
+ * video alone is sent, exactly as before this existed, and the reason is
+ * logged.
+ */
+async function muxToResponse(
+  videoUrl: string,
+  audioUrl: string,
+  filename: string,
+  res: Response
+): Promise<void> {
+  const abort = new AbortController();
+  const onClientGone = () => {
+    if (!res.writableFinished) abort.abort();
+  };
+  res.on("close", onClientGone);
+
+  const dir = await mkdtemp(path.join(tmpdir(), "reelsavenow-"));
+  const videoPath = path.join(dir, "video.mp4");
+  const audioPath = path.join(dir, "audio.mp4");
+  const outputPath = path.join(dir, "joined.mp4");
+
+  try {
+    const [video, audio] = await Promise.allSettled([
+      downloadToFile(videoUrl, videoPath, abort.signal),
+      downloadToFile(audioUrl, audioPath, abort.signal),
+    ]);
+    if (abort.signal.aborted) return;
+    if (video.status === "rejected") {
+      if (video.reason instanceof AppError) throw video.reason;
+      throw new AppError("SERVER_ERROR", "Could not download this media right now. Please try again.", 502);
+    }
+
+    let fileToSend = videoPath;
+    if (audio.status === "rejected") {
+      console.warn(`[download] could not fetch the separate audio stream; sending the video alone: ${String(audio.reason)}`);
+    } else {
+      const result = await runFfmpeg(
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-i",
+          videoPath,
+          "-i",
+          audioPath,
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "-f",
+          "mp4",
+          "-y",
+          outputPath,
+        ],
+        abort.signal
+      );
+      if (abort.signal.aborted) return;
+      if (result.ok) {
+        fileToSend = outputPath;
+      } else if (result.missing) {
+        if (!ffmpegMissingLogged) {
+          ffmpegMissingLogged = true;
+          console.warn(`[download] ffmpeg not found (${FFMPEG_PATH}); videos without a muxed audio track are sent silent`);
+        }
+      } else {
+        console.warn(`[download] joining audio failed; sending the video alone: ${result.detail}`);
+      }
+    }
+
+    await sendFile(fileToSend, filename, res);
+  } finally {
+    res.off("close", onClientGone);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /**
  * Holds one of a fixed number of transfer slots for the whole download, and
  * refuses with 503 rather than queueing: a download is user-initiated and
@@ -269,7 +462,8 @@ function createTransferGuard(): Transform {
 async function streamWithinCapacity(
   sourceUrl: string,
   filename: string,
-  res: Response
+  res: Response,
+  audioUrl?: string
 ): Promise<void> {
   if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
     throw new AppError(
@@ -281,7 +475,8 @@ async function streamWithinCapacity(
 
   activeDownloads += 1;
   try {
-    await streamToResponse(sourceUrl, filename, res);
+    if (audioUrl) await muxToResponse(sourceUrl, audioUrl, filename, res);
+    else await streamToResponse(sourceUrl, filename, res);
   } finally {
     activeDownloads -= 1;
   }

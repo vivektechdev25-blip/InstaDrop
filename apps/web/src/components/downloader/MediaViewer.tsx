@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { MediaItem } from "@reelsavenow/types";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,48 @@ export interface MediaViewerProps {
 // collapse to zero height and pop open once content loaded - a real,
 // visible layout shift.
 const FALLBACK_ASPECT_RATIO = 9 / 16;
+
+/**
+ * A video-only file played with its sound from a separate stream, so the
+ * preview is not silent when the download will have audio. The video's own
+ * controls drive the audio: play, pause, seek, speed and volume follow it.
+ */
+function VideoWithSeparateAudio({ src, audioSrc, poster }: { src: string; audioSrc: string; poster: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const follow = (video: HTMLVideoElement) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = video.muted;
+    audio.volume = video.volume;
+    audio.playbackRate = video.playbackRate;
+    if (Math.abs(audio.currentTime - video.currentTime) > 0.3) audio.currentTime = video.currentTime;
+    if (video.paused) audio.pause();
+    else void audio.play().catch(() => {});
+  };
+
+  return (
+    <>
+      <video
+        controls
+        playsInline
+        poster={poster}
+        className="h-full w-full"
+        onPlay={(event) => follow(event.currentTarget)}
+        onPause={(event) => follow(event.currentTarget)}
+        onSeeked={(event) => follow(event.currentTarget)}
+        onRateChange={(event) => follow(event.currentTarget)}
+        onVolumeChange={(event) => follow(event.currentTarget)}
+        onWaiting={() => audioRef.current?.pause()}
+        onPlaying={(event) => follow(event.currentTarget)}
+        onEnded={() => audioRef.current?.pause()}
+      >
+        <source src={src} type="video/mp4" />
+      </video>
+      <audio ref={audioRef} src={audioSrc} preload="auto" aria-hidden="true" className="hidden" />
+    </>
+  );
+}
 
 export function MediaViewer({ media, alt }: MediaViewerProps) {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -33,9 +75,13 @@ export function MediaViewer({ media, alt }: MediaViewerProps) {
         className="relative max-h-[70vh] w-full overflow-hidden rounded-md bg-black"
         style={{ aspectRatio }}
       >
-        <video controls playsInline poster={media.thumbnail} className="h-full w-full">
-          <source src={media.url} type="video/mp4" />
-        </video>
+        {media.audioUrl ? (
+          <VideoWithSeparateAudio src={media.url} audioSrc={media.audioUrl} poster={media.thumbnail} />
+        ) : (
+          <video controls playsInline poster={media.thumbnail} className="h-full w-full">
+            <source src={media.url} type="video/mp4" />
+          </video>
+        )}
       </div>
     );
   }

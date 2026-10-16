@@ -10,6 +10,12 @@ export interface MediaItem {
   url: string;
   thumbnail: string;
   dimensions: MediaDimensions;
+  /**
+   * Videos only: a separate audio stream, present when Instagram served no
+   * rendition carrying both picture and sound (it does this to datacenter
+   * networks). `url` is then video-only; the download joins the two.
+   */
+  audioUrl?: string;
 }
 
 export interface InstagramAuthor {

@@ -49,6 +49,12 @@ RUN pnpm --filter "@reelsavenow/api..." build
 
 FROM base AS runner
 ENV NODE_ENV=production
+# ffmpeg joins a video-only file to its separate audio stream when Instagram
+# serves this server no rendition carrying both (it does, to datacenter
+# networks - see docs/KNOWN_ISSUES.md). Copy only, never re-encodes.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 # pnpm gives each workspace package its own node_modules full of symlinks
 # into the shared /app/node_modules/.pnpm store (e.g.
 # apps/api/node_modules/express -> ../../../node_modules/.pnpm/express@.../...) -

@@ -14,5 +14,7 @@ export function buildDownloadFilename(
 
 export function buildDownloadUrl(media: MediaItem, filename: string): string {
   const params = new URLSearchParams({ url: media.url, filename });
+  // A video-only file with its sound in a separate stream: the API joins them.
+  if (media.type === "video" && media.audioUrl) params.set("audio", media.audioUrl);
   return `${API_BASE_URL}/download?${params.toString()}`;
 }
