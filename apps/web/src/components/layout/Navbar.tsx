@@ -18,10 +18,14 @@ const MobileNav = dynamic(
   { ssr: false }
 );
 
+// Home leads, so every page - legal, contact, support - has a named way back
+// to the downloader, not only the logo.
 const NAV_LINKS = [
+  { href: "/", label: "Home" },
   { href: "/privacy-policy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
   { href: "/contact", label: "Contact" },
+  { href: "/support", label: "Support" },
 ];
 
 export function Navbar() {
