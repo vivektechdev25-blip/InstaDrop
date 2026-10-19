@@ -10,6 +10,7 @@ export interface ServerConfig {
   /** Undefined keeps app.ts's address-class default. */
   trustProxy?: number | string[];
   commit: string | null;
+  regionProxy: RegionProxy | null;
 }
 
 /**
@@ -93,11 +94,90 @@ export function parseCorsOrigins(raw: string | undefined): string[] {
   return origins;
 }
 
+/** A proxy in Playwright's shape, plus a credential-free label for logs. */
+export interface RegionProxy {
+  server: string;
+  username?: string;
+  password?: string;
+  /** scheme://host:port - never the credentials. */
+  label: string;
+}
+
+const REGION_PROXY_SCHEMES = new Set(["http:", "https:", "socks5:"]);
+
+/**
+ * INSTAGRAM_REGION_PROXY_URL: where to re-read a post page when Instagram
+ * has muted its music for this server's country (see playwrightTier's
+ * region recovery). For example `http://user:pass@203.0.113.7:8899` for a
+ * proxy in India. Unset disables the recovery.
+ *
+ * A malformed value stops the boot, like PORT and CORS_ORIGIN, rather than
+ * silently disabling the feature. The error names the problem but never
+ * echoes the value, which carries a password.
+ */
+export function parseRegionProxy(raw: string | undefined): RegionProxy | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error("Invalid INSTAGRAM_REGION_PROXY_URL: not a URL (expected scheme://[user:pass@]host:port).");
+  }
+  if (!REGION_PROXY_SCHEMES.has(parsed.protocol)) {
+    throw new Error("Invalid INSTAGRAM_REGION_PROXY_URL: the scheme must be http, https or socks5.");
+  }
+  // URL drops a scheme's default port (`http://host:80` has port ""), so
+  // one written out is also looked for in the text itself.
+  const port = parsed.port || explicitDefaultPort(trimmed);
+  if (!parsed.hostname || !port) {
+    throw new Error("Invalid INSTAGRAM_REGION_PROXY_URL: it needs a host and an explicit port.");
+  }
+  // "/" for http(s); "" for socks5, which is not a special scheme to URL.
+  if ((parsed.pathname !== "/" && parsed.pathname !== "") || parsed.search || parsed.hash) {
+    throw new Error("Invalid INSTAGRAM_REGION_PROXY_URL: give only scheme, credentials, host and port.");
+  }
+  // Chromium cannot sign in to a SOCKS5 proxy, and Playwright refuses the
+  // pair - which would fail every re-read instead of the boot.
+  if (parsed.protocol === "socks5:" && (parsed.username || parsed.password)) {
+    throw new Error(
+      "Invalid INSTAGRAM_REGION_PROXY_URL: Chromium cannot use a socks5 proxy with a username or password; use http:// or https://."
+    );
+  }
+
+  let username: string;
+  let password: string;
+  try {
+    username = decodeURIComponent(parsed.username);
+    password = decodeURIComponent(parsed.password);
+  } catch {
+    throw new Error(
+      "Invalid INSTAGRAM_REGION_PROXY_URL: the username or password has a broken %-escape (write a literal % as %25)."
+    );
+  }
+
+  const server = `${parsed.protocol}//${parsed.hostname}:${port}`;
+  return {
+    server,
+    ...(username ? { username } : {}),
+    ...(password ? { password } : {}),
+    label: server,
+  };
+}
+
+/** The `80` of `http://user:pass@host:80`, which URL normalises away. */
+function explicitDefaultPort(raw: string): string {
+  const authority = raw.slice(raw.indexOf("//") + 2).split(/[/?#]/, 1)[0] ?? "";
+  return /:(\d+)$/.exec(authority.slice(authority.lastIndexOf("@") + 1))?.[1] ?? "";
+}
+
 export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     port: parsePort(env.PORT),
     corsOrigins: parseCorsOrigins(env.CORS_ORIGIN),
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     commit: parseCommit(env.RAILWAY_GIT_COMMIT_SHA),
+    regionProxy: parseRegionProxy(env.INSTAGRAM_REGION_PROXY_URL),
   };
 }

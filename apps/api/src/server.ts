@@ -27,6 +27,11 @@ const app = createApp({
 // health check that never passes while the logs look perfectly healthy.
 const server = app.listen(config.port, "0.0.0.0", () => {
   console.log(`ReelSaveNow API listening on port ${config.port}${config.commit ? ` (commit ${config.commit})` : ""}`);
+  console.log(
+    config.regionProxy
+      ? `[regionProxy] reels whose music Instagram mutes here will be re-read through ${config.regionProxy.label}`
+      : "[regionProxy] not configured: reels whose music Instagram mutes in this server's country will download without sound"
+  );
 });
 
 // Node's defaults give a client 60s to finish sending headers and 300s to

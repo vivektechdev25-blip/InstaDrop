@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext } from "playwright";
+import type { RegionProxy } from "../../config/env";
 import { AppError } from "../../errors/AppError";
 import { USER_AGENT, VIEWPORT } from "./mediaExtractionHelpers";
 
@@ -132,7 +133,7 @@ function invalidate(stale: Promise<Browser>): void {
  * use it: the wait ends early if the queue is full, if the deadline passes,
  * or if the client has already disconnected.
  */
-async function acquireContextSlot(signal?: AbortSignal): Promise<void> {
+async function acquireContextSlot(signal?: AbortSignal, priority = false): Promise<void> {
   if (signal?.aborted) throw busyError();
 
   if (activeContexts < MAX_CONCURRENT_CONTEXTS) {
@@ -140,7 +141,11 @@ async function acquireContextSlot(signal?: AbortSignal): Promise<void> {
     return;
   }
 
-  if (slotWaiters.length >= MAX_QUEUED_REQUESTS) {
+  // A priority caller is the second half of a request this service already
+  // accepted (the region re-read): it waits only for the scrape running now,
+  // not behind newer requests, and the queue limit - a promise to new
+  // callers about waiting time - does not turn it away.
+  if (!priority && slotWaiters.length >= MAX_QUEUED_REQUESTS) {
     throw busyError();
   }
 
@@ -165,7 +170,8 @@ async function acquireContextSlot(signal?: AbortSignal): Promise<void> {
     }
 
     signal?.addEventListener("abort", onAbort, { once: true });
-    slotWaiters.push(waiter);
+    if (priority) slotWaiters.unshift(waiter);
+    else slotWaiters.push(waiter);
   });
 }
 
@@ -210,15 +216,31 @@ async function recycleBrowserIfIdle(): Promise<void> {
  */
 export async function withBrowserContext<T>(
   run: (context: BrowserContext) => Promise<T>,
-  { signal }: { signal?: AbortSignal } = {}
+  {
+    signal,
+    proxy,
+    priority = false,
+  }: { signal?: AbortSignal; proxy?: RegionProxy | null; priority?: boolean } = {}
 ): Promise<T> {
-  await acquireContextSlot(signal);
+  await acquireContextSlot(signal, priority);
 
   try {
     const browser = await getBrowser();
     const context = await browser.newContext({
       userAgent: USER_AGENT,
       viewport: VIEWPORT,
+      // Per context, not per browser: only the region-recovery page load
+      // goes through the proxy, everything else stays direct, and both
+      // share the one Chromium a small container can afford.
+      ...(proxy
+        ? {
+            proxy: {
+              server: proxy.server,
+              ...(proxy.username ? { username: proxy.username } : {}),
+              ...(proxy.password ? { password: proxy.password } : {}),
+            },
+          }
+        : {}),
     });
     contextsSinceLaunch += 1;
 

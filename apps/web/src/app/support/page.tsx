@@ -197,6 +197,17 @@ const PROBLEMS: Problem[] = [
     ),
   },
   {
+    title: "The video downloaded without sound",
+    message: null,
+    fix: (
+      <>
+        Many reels use licensed music, and Instagram mutes some songs in some countries. When it has muted a
+        reel&apos;s sound, the preview says so, with Instagram&apos;s own reason, before you download. A reel whose
+        creator removed the sound has none to download.
+      </>
+    ),
+  },
+  {
     title: "Only one item of a carousel was saved",
     message: null,
     fix: <>Download saves the item on screen. Move to the next photo or video with the arrows or dots and press Download again for each one.</>,

@@ -150,6 +150,23 @@ describe("withBrowserContext - bounded concurrency", () => {
     });
   });
 
+  it("puts a region proxy on that one context only, without its log label", async () => {
+    const { launch, withBrowserContext, helpers } = await loadModules();
+    const browser = createFakeBrowser();
+    launch.mockResolvedValue(browser as never);
+    const proxy = { server: "http://203.0.113.7:8899", username: "u", password: "p", label: "http://203.0.113.7:8899" };
+
+    await withBrowserContext(async () => "direct");
+    await withBrowserContext(async () => "through the proxy", { proxy });
+
+    expect(browser.newContext.mock.calls[0]![0]).not.toHaveProperty("proxy");
+    expect(browser.newContext.mock.calls[1]![0]).toEqual({
+      userAgent: helpers.USER_AGENT,
+      viewport: helpers.VIEWPORT,
+      proxy: { server: "http://203.0.113.7:8899", username: "u", password: "p" },
+    });
+  });
+
   it("never runs more than two contexts at once", async () => {
     const { launch, withBrowserContext } = await loadModules({ SCRAPER_MAX_CONCURRENCY: "2" });
     launch.mockResolvedValue(createFakeBrowser() as never);
@@ -192,6 +209,28 @@ describe("withBrowserContext - bounded concurrency", () => {
     await expect(Promise.all(accepted)).resolves.toHaveLength(5);
   });
 
+  // A muted reel's re-read is the second half of a request already
+  // accepted. Behind the queue it waited for every newer request and, past
+  // the queue's 10s, failed as "busy" - so it goes first, and a full queue
+  // does not turn it away.
+  it("serves a priority caller before the queue, even when the queue is full", async () => {
+    const { launch, withBrowserContext } = await loadModules({
+      SCRAPER_MAX_CONCURRENCY: "1",
+      SCRAPER_MAX_QUEUED: "3",
+    });
+    launch.mockResolvedValue(createFakeBrowser() as never);
+
+    const order: string[] = [];
+    const gate = deferred();
+    const running = withBrowserContext(() => gate.promise);
+    const queued = ["a", "b", "c"].map((name) => withBrowserContext(async () => void order.push(name)));
+    const reread = withBrowserContext(async () => void order.push("re-read"), { priority: true });
+
+    gate.resolve();
+    await Promise.all([running, ...queued, reread]);
+    expect(order).toEqual(["re-read", "a", "b", "c"]);
+  });
+
   it("closes the context on success and on a thrown error", async () => {
     const { launch, withBrowserContext } = await loadModules();
     const browser = createFakeBrowser();
@@ -228,7 +267,7 @@ describe("withBrowserContext - bounded concurrency", () => {
   });
 
   it("releases its slot on every failure path - no deadlock afterwards", async () => {
-    const { launch, withBrowserContext } = await loadModules();
+    const { launch, withBrowserContext } = await loadModules({ SCRAPER_MAX_CONCURRENCY: "2" });
     const browser = createFakeBrowser();
     browser.newContext.mockRejectedValueOnce(new Error("newContext failed"));
     launch.mockRejectedValueOnce(new Error("launch failed")).mockResolvedValue(browser as never);
@@ -259,7 +298,7 @@ describe("withBrowserContext - bounded concurrency", () => {
 
   it("is the only way either scraping flow opens a context", () => {
     const read = (file: string) => readFileSync(join(__dirname, "../src/services", file), "utf8");
-    for (const file of ["scrapers/playwrightTier.ts", "privateContentService.ts"]) {
+    for (const file of ["scrapers/playwrightTier.ts", "scrapers/regionRecovery.ts", "privateContentService.ts"]) {
       const source = read(file);
       expect(source).toContain("withBrowserContext(");
       expect(source).not.toContain(".newContext(");

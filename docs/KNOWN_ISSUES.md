@@ -1,5 +1,78 @@
 # Known Issues
 
+## Root cause of "sometimes the video has no sound" — 2026-10-19
+
+**Symptom.** Downloads had sound for some reels and none for others, on desktop and phone alike. The problem came back after every earlier fix (2026-08-05, 2026-10-15, 2026-10-16, below).
+
+**Root cause: Instagram mutes licensed music per country, and the API read Instagram from another country than its users.** For a reel using licensed music that is not licensed in the requester's country, Instagram mutes the reel there. It lists only video-only renditions and no audio stream, and says so in the page data. On 2026-10-16 production read Instagram from San Jose (CDN hosts `scontent-sjc*`); the site's users are in India. Reels Instagram muted in the US came out silent; reels with original sound, or with music licensed in both countries, had sound — which, from the outside, looked random.
+
+Measured on reel `DdrSGp3SqWG` (licensed song "Dupatta Tera Nau Rang Da") against `DeNCvHYJjqj` (original sound):
+
+| | From India (re-measured 2026-10-19) | Production, 2026-10-16 (`scontent-sjc*`, US) | Production, 2026-10-19 (`scontent-sin*`) |
+|---|---|---|---|
+| Instagram's flags, `DdrSGp3SqWG` | `has_audio=true should_mute_audio=false` | `has_audio=false should_mute_audio=true`, reason "This music can't be played due to recent licensing changes with the rights holder." | not logged (sound was found, so the flags are not read) |
+| Renditions, `DdrSGp3SqWG` | a muxed rendition (1 video + 1 audio track), and an audio stream in the DASH manifest | 5 inspected, all `1v/0a`; no audio stream in the manifest | a muxed rendition |
+| Download, `DdrSGp3SqWG` | — | 1v/0a | 1v/1a |
+| Download, `DeNCvHYJjqj` | — | 1v/1a | 1v/1a |
+
+**2026-10-19: production now reads Instagram from somewhere else.** Production's `/fetch` returned Singapore CDN hosts (`scontent-sin*`) instead of `scontent-sjc*`, and `DdrSGp3SqWG` downloaded from production with both tracks. The deploy was still `dfc8abf`, so the code did not change: the Railway service had been moved to Singapore (`asia-southeast1`), confirmed by the owner. That reel is not muted there. Reels whose music is not licensed in the server's current country still will be — which ones is not known in advance; the `[regionRecovery]` log line below names each one.
+
+**Why every earlier fix only half-worked.** Each one improved how the API chooses or assembles streams: probing renditions for an audio track (10-15), joining a separate audio stream with ffmpeg (10-16). Those fixed the cases where Instagram offered sound somewhere in the US response. None could help when the US response contained no sound at all, and that is exactly what a licensing mute produces.
+
+**What made a cheap fix possible.** Only the page data depends on the country, not who may fetch the media. The production server downloaded the India-served rendition of both reels with both tracks (`DdrSGp3SqWG`: 1,380,627 bytes, 1v/1a), and their India-served audio streams, without any proxy. That was measured on 2026-10-19, from wherever production then read Instagram (Singapore hosts that day), not from the US. A document-only page read from India measured about 690KB and 0.8–4.3s.
+
+**Fix.** `regionRecovery.ts`:
+
+- When the chosen file is measured silent and Instagram's own flags say it muted the post (`should_mute_audio=true`), the API re-reads the page through `INSTAGRAM_REGION_PROXY_URL`, a proxy in India. It loads the HTML document only, and takes the renditions listed there.
+- Probing and the download stay direct.
+- Posts with sound, and posts that genuinely have none, never touch the proxy.
+- The re-read waits only for the scrape running now, not behind the queue, and starts only if the request can still finish within 25s (the site gives up at 30s). The page load through the proxy is capped at 12s.
+- A proxy fault (unreachable, refused, too slow, or no post served through it) pauses the proxy for 5 minutes, so a broken proxy costs one 12-second wait, not one per request. A busy server, a user who left, or a reel with no sound there either does not pause it.
+- When sound still cannot be had (no proxy configured, muted in India too, proxy down), the video downloads silent, and the preview says so with Instagram's own reason (`MediaItem.audioMutedReason`) instead of leaving the user to find out afterwards. Not every muted reel can be recovered.
+- `scripts/region-proxy.cjs` is a dependency-free proxy to run on any small server in India. It tunnels only HTTPS to Instagram's hosts at public addresses and always requires a password. It drops a connection that has not finished its request within 10s and holds at most 256 connections. Setup: [DEPLOYMENT.md](./DEPLOYMENT.md#licensed-music-and-the-region-proxy).
+
+**Review fixes, 2026-10-19.** An independent review of the first version found and fixed:
+
+- the breaker tripped on every failure — including "no free browser slot" — so a few users at once could silence every muted reel for 5 minutes;
+- the re-read queued behind newer requests for the one browser slot, then failed as "busy";
+- nothing bounded the whole re-read, so it could push `/fetch` past the site's 30s timeout and turn a silent video into an error;
+- unreadable audio flags failed the whole scrape (the diagnostics they replaced could not);
+- `INSTAGRAM_REGION_PROXY_URL`:
+  - refused `:80`/`:443` as "no port", because URL drops a default port;
+  - accepted `socks5://user:pass@…`, which Chromium cannot use;
+  - crashed the boot with a bare `URIError` on a broken `%`-escape;
+- the proxy had no header deadline or connection cap, and did not check what a host resolved to;
+- the systemd example put the password in the unit file.
+
+**Verified.**
+
+- Through a real proxy (`scripts/region-proxy.cjs`) against real Instagram, from India, on Windows and in the production Docker image (Linux, 512MB):
+  - `DdrSGp3SqWG` re-read in 1.3–2.6s and `DeNCvHYJjqj` in 0.9–1.5s, across runs before and after the review fixes;
+  - both recovered files, downloaded by the production server, have 1 video + 1 audio track;
+  - on Windows, the decision path, fed a muted first read, swapped in the re-read video (1.2s).
+- From India neither reel is muted, so this proves the re-read and the download path, not the trigger. The trigger — a muted first read — is covered by the integration tests with a muted page. Its flags are read with the same page-data walk that produced the 2026-10-16 production log.
+- The proxy logged only `www.instagram.com` tunnels.
+- A wrong proxy password fails at the 12s cap (12.0–12.1s), counts as a proxy fault, and pauses the proxy. The next muted post returned at once, with its reason.
+- The full API in Docker (from India) returns 1v/1a for both reels and 400 for an invalid link.
+- Startup: the log names the proxy without its password. A malformed `INSTAGRAM_REGION_PROXY_URL` (socks5 with a password, a broken `%`-escape, no port) stops the boot with a clear error and never prints the password.
+- Unit and integration tests cover:
+  - the decision (recover, leave alone, no proxy, muted there too, proxy down, breaker, time left);
+  - what counts as a proxy fault;
+  - the slot priority;
+  - the tier glue, with a muted US page and an India page;
+  - config parsing, including that a password never appears in an error or a log;
+  - the proxy's access rules over the wire.
+- Mutation checks: 3 on the first version and 15 on the review fixes, each one making a test fail.
+
+**Not verified:**
+
+- the whole path in production — a muted first read from the server's real country, then a re-read through a real proxy in India (needs the India egress below);
+- how long that re-read takes from the server's region, as opposed to from India;
+- that a server in the US (as opposed to production's location on 2026-10-19) can download India-served files;
+- files much larger than the ~1.1–1.4MB reels measured, when served from an Indian CDN edge to the server.
+
+**Needs, outside the code:** an India egress, set in `INSTAGRAM_REGION_PROXY_URL` on Railway, if the `[regionRecovery] … INSTAGRAM_REGION_PROXY_URL is not set` line shows up in the Railway log. Without one, reels Instagram mutes in the server's country download silent (with the reason shown). Running the API itself in India would also avoid the mute.
+
 ## Security audit — 2026-10-15
 
 Found and fixed, each verified rather than assumed (full detail in [SECURITY.md](./SECURITY.md)):
@@ -126,7 +199,7 @@ Cost: one extra ranged request on the happy path, capped at four probes.
 
 **Verified** against the real URLs: the exact URL production served probes `false`, an audio-bearing URL probes `true`, and the selector picks the audio one when offered both. 17 unit tests cover the box parsing and the selection order, built on synthetic MP4 headers so they need no network; each was mutation-checked by reverting the fix and confirming failure.
 
-**Recurred 2026-10-16, fixed by joining the streams.** Instagram then offered production no muxed rendition at all: every candidate probed `1v/0a` (Railway log: `no candidate had both video and audio; inspected 5`), so selection had nothing to pick, and reels downloaded silent on desktop and phone alike. Selection cannot create a muxed file, but the page data still carries a `video_dash_manifest` whose audio AdaptationSet points at a separate AAC stream — read from the page data, because the muted autoplay never requests the audio over the network.
+**Recurred 2026-10-16, fixed by joining the streams.** (The remaining, underlying cause — licensed music Instagram mutes in the US — is in the 2026-10-19 section at the top.) Instagram then offered production no muxed rendition at all: every candidate probed `1v/0a` (Railway log: `no candidate had both video and audio; inspected 5`), so selection had nothing to pick, and reels downloaded silent on desktop and phone alike. Selection cannot create a muxed file, but the page data still carries a `video_dash_manifest` whose audio AdaptationSet points at a separate AAC stream — read from the page data, because the muted autoplay never requests the audio over the network.
 
 - `findDashAudioUrls()` reads those audio streams out of the manifest. When no candidate has both tracks, `selectVideoAndAudio()` pairs the best video-only file with the first stream that probes as audio-only (an audio track and no video), and the API returns it as the media item's `audioUrl`.
 - `/download` takes an optional `audio` parameter, allowlisted like `url`. With it, both files are fetched under the usual size, stall and concurrency limits into a private temp folder. ffmpeg joins them with `-c copy +faststart` — no re-encode, a normal (not fragmented) MP4 every player and messaging app accepts — and the result is sent with its exact `Content-Length`. The temp folder is always removed. If the audio can't be fetched, or ffmpeg is missing or fails, the video alone is sent as before and the reason is logged.

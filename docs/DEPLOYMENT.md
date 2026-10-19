@@ -69,6 +69,7 @@ Check in the Railway dashboard:
 | `DOWNLOAD_MAX_BYTES` | **No** | Largest file relayed. Default 300MB. |
 | `FFMPEG_PATH` | **No** | ffmpeg used to join a video-only file to its separate audio stream. Default `ffmpeg` on `PATH`; the Docker image installs it. Without it, those videos download silent. |
 | `DOWNLOAD_MUX_TIMEOUT_MS` | **No** | How long the join may take before the video is sent alone. Default `60000`. |
+| `INSTAGRAM_REGION_PROXY_URL` | **No** | A proxy in India, `http://user:password@host:port` (or `https://`; `socks5://` only without a username and password, which Chromium cannot send to SOCKS5). Used only when Instagram has muted a post's sound in the API's own country — licensed music, see [Licensed music and the region proxy](#licensed-music-and-the-region-proxy). Unset: those reels download silent, and the site says why. A malformed value stops the boot, with an error that names the problem but never the password. |
 | `TRUST_PROXY` | **No** | Leave unset. Overrides which forwarding hops are trusted: an integer is a hop count, otherwise a comma-separated list of names/CIDRs. The default trusts every non-public address and keys on the right-most public one — see SECURITY.md. |
 | `RAILWAY_GIT_COMMIT_SHA` | Set by Railway | Not set by hand. Reported by `/health` as `commit`, which is how a deploy is verified. |
 | `SCRAPER_BROWSER_RECYCLE_AFTER` | **No** | Contexts served before the idle browser is relaunched to reclaim memory Chromium does not return. Default `40`. |
@@ -77,8 +78,74 @@ Check in the Railway dashboard:
 
 - Base image `mcr.microsoft.com/playwright:v1.62.1-jammy` ships Chromium and its OS libraries. Its tag **must** match the `playwright` version pinned in `apps/api/package.json`, or the browser binary won't match what the npm package expects.
 - Launch flags `--disable-dev-shm-usage` (containers mount `/dev/shm` at 64MB, which Chromium exhausts on an image-heavy page) and `--no-sandbox` (the image runs as root). The `--no-sandbox` justification depends on only ever navigating to Instagram — see the URL-validation tests.
-- **Concurrency cap:** at most 2 browser contexts at once, 8 queued, `503` beyond (`browserManager.ts`). The browser un-caches itself when it dies, so an OOM-killed Chromium no longer leaves a healthy-looking but permanently broken service.
+- **Concurrency cap:** 1 browser context at once by default (`SCRAPER_MAX_CONCURRENCY`), 3 queued (`SCRAPER_MAX_QUEUED`), `503` beyond (`browserManager.ts`). A muted reel's region re-read waits only for the scrape running now, not behind the queue. The browser un-caches itself when it dies, so an OOM-killed Chromium no longer leaves a healthy-looking but permanently broken service.
 - **Memory:** see the measured figure in [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) (container run, 2026-10-14) before choosing a Railway plan. If the service restarts under real use, that's the memory ceiling.
+
+### Licensed music and the region proxy
+
+**Why it can be needed.** Instagram lists different renditions for a post depending on the country the page is requested from. For a reel whose licensed music is not licensed in that country, it mutes the reel there: only video-only renditions and no audio stream (`should_mute_audio=true`, reason "This music can't be played due to recent licensing changes with the rights holder."). On 2026-10-16 production read Instagram from the US (CDN hosts `scontent-sjc*`) and `DdrSGp3SqWG` downloaded silent, while from India it plays with sound. On 2026-10-19, after the Railway service was moved to Singapore (`asia-southeast1`), production got Singapore CDN hosts (`scontent-sin*`) and the same reel downloaded with sound. Which reels come out muted depends on where the API reads Instagram from — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#root-cause-of-sometimes-the-video-has-no-sound--2026-10-19).
+
+**Whether you need it.** Every muted reel logs `[regionRecovery] Instagram muted this post's sound in this server's country and INSTAGRAM_REGION_PROXY_URL is not set`. If that line never appears in the Railway log, a proxy would never be used.
+
+**What the API does with a proxy.** Only for a post Instagram muted in the API's country, it re-reads the page through `INSTAGRAM_REGION_PROXY_URL` — the HTML document only, about 700KB — and takes the renditions Instagram lists in the proxy's country. Probing and the download itself stay direct (measured on two reels: the production server downloaded the India-served files, both tracks). Every other post never touches the proxy.
+
+- The re-read starts only if the request can still finish within 25 seconds (the site gives up at 30), and the page load through the proxy is capped at 12 seconds.
+- If the proxy itself fails — unreachable, wrong password, too slow, or Instagram serves no post through it — it is skipped for 5 minutes. A busy server, a user who left, or a reel with no sound there either does not pause it.
+- Whenever sound cannot be had, the reel downloads silent and the site shows Instagram's reason.
+- Not every muted reel can be recovered: Instagram may mute the same music in India too.
+
+**Setting it up — option A, a small server in India.** The smallest plan is plenty. Providers with Indian regions include DigitalOcean (Bangalore), AWS Lightsail (Mumbai) and Oracle Cloud (Mumbai, Hyderabad); check current prices and free tiers yourself.
+
+1. Create the smallest Linux server in an Indian region and install Node 20+.
+2. Copy `scripts/region-proxy.cjs` to `/opt/region-proxy/region-proxy.cjs`. It only tunnels HTTPS to Instagram's own hosts, only where they resolve to public addresses, and always requires the password — it cannot become an open proxy.
+3. Put the credentials in a file only root can read — not in the unit file, which every user on the server can read, as can `systemctl show`:
+
+   ```sh
+   sudo install -m 600 /dev/null /etc/region-proxy.env
+   sudo nano /etc/region-proxy.env
+   ```
+
+   ```ini
+   PROXY_USER=reelsavenow
+   PROXY_PASSWORD=<long random password, for example the output of: openssl rand -hex 24>
+   PORT=8899
+   ```
+
+4. Run it as a service:
+
+   ```ini
+   # /etc/systemd/system/region-proxy.service
+   [Unit]
+   Description=ReelSaveNow region proxy
+   After=network-online.target
+   Wants=network-online.target
+
+   [Service]
+   EnvironmentFile=/etc/region-proxy.env
+   ExecStart=/usr/bin/node /opt/region-proxy/region-proxy.cjs
+   DynamicUser=yes
+   NoNewPrivileges=yes
+   ProtectSystem=strict
+   ProtectHome=yes
+   PrivateTmp=yes
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   `sudo systemctl enable --now region-proxy`. systemd reads the env file as root, then runs the proxy as a throwaway unprivileged user. Check the node path in `ExecStart` with `which node`; follow the log with `journalctl -u region-proxy -f`.
+5. Open TCP 8899 in the provider's firewall and the server's own (`sudo ufw allow 8899/tcp`). If your Railway plan has static outbound IPs, allow only those.
+6. On Railway, set `INSTAGRAM_REGION_PROXY_URL=http://reelsavenow:<password>@<server-ip>:8899` (percent-encode special characters in the password; a hex password has none) and redeploy.
+
+**Option B, a paid proxy service with an India location.** Use the `http://user:pass@host:port` or `https://…` address it gives you. `socks5://` works only without a username and password. The API sends it only page reads of muted posts.
+
+**Security notes.**
+
+- With `http://`, the proxy password crosses the internet unencrypted between Railway and the proxy; the Instagram traffic inside the tunnel stays TLS. Someone who captured it could reach only Instagram's hosts through your server — using its bandwidth and risking its IP being rate-limited — so use a password made for this alone, and change it if in doubt. An `https://` proxy avoids this.
+- The proxy logs the hosts it tunnels to and what it refuses, never passwords or page contents. It drops a connection that has not finished its request within 10 seconds and holds at most 256 connections and 64 tunnels.
+
+**Checking it works.** After the deploy, right after `ReelSaveNow API listening on port …`, the API log reads `[regionProxy] reels whose music Instagram mutes here will be re-read through http://<server-ip>:8899`. When a muted reel is fetched, the log shows `re-reading the page through …` followed by `recovered the sound: …`, and the file has sound. `[regionRecovery] could not re-read the page through the proxy (…)` means the proxy is unreachable, the password is wrong, or Instagram served nothing through it; when that is the proxy's fault, `[circuitBreaker] "region-proxy" disabled for 5 min` follows.
 
 ### `trust proxy`
 
