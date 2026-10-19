@@ -3,6 +3,7 @@ import type { IMediaScraper } from "../../interfaces/IMediaScraper";
 import { AppError } from "../../errors/AppError";
 import { withBrowserContext } from "./browserManager";
 import { extractShortcode } from "./shortcode";
+import { resolveMutedAudio } from "./regionRecovery";
 import {
   NAVIGATION_TIMEOUT_MS,
   POST_LOAD_WAIT_MS,
@@ -10,7 +11,8 @@ import {
   readPageMeta,
   findProgressiveVideoUrls,
   findDashAudioUrls,
-  describeAudioAvailability,
+  readAudioAvailability,
+  formatAudioAvailability,
   MAX_CAPTURED_MEDIA,
   selectVideoAndAudio,
   stripByteRangeParams,
@@ -54,7 +56,8 @@ export const playwrightTier: IMediaScraper = {
   tierName: "playwright",
 
   async extract(url: string, { signal }: { signal?: AbortSignal } = {}): Promise<InstagramPost> {
-    return withBrowserContext(async (context) => {
+    const startedAt = Date.now();
+    const scraped = await withBrowserContext(async (context) => {
       const page = await context.newPage();
 
       // Chromium's video-preload behavior fetches the asset in byte-range
@@ -150,33 +153,46 @@ export const playwrightTier: IMediaScraper = {
           ? await selectVideoAndAudio(
               await findProgressiveVideoUrls(page),
               [...capturedMediaUrls],
-              await findDashAudioUrls(page),
-              () => describeAudioAvailability(page)
+              await findDashAudioUrls(page)
             )
           : null;
 
-      const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
-        video
-          ? {
-              type: "video",
-              url: video.url,
-              ...(video.audioUrl ? { audioUrl: video.audioUrl } : {}),
-              thumbnail: imageUrl,
-              dimensions,
-            }
-          : { type: "image", url: imageUrl, thumbnail: imageUrl, dimensions }
-      );
+      // Only for a file measured to be silent: is that the post itself, or
+      // did Instagram mute it for this server's country? See regionRecovery.ts.
+      const availability = video?.silent ? await readAudioAvailability(page) : null;
+      if (availability) console.warn(`[mediaExtraction] ${formatAudioAvailability(availability)}`);
 
       const { username, caption } = parseOgDescription(meta.ogDescription);
-      const shortcode = extractShortcode(url);
-
-      return {
-        id: shortcode,
-        shortcode,
-        caption,
-        author: { username, full_name: username },
-        media,
-      };
+      return { slideImageUrls, dimensions, video, availability, username, caption };
     }, { signal });
+
+    // After the first browser context is closed, so a re-read through the
+    // region proxy never waits on a slot this request is itself holding.
+    const { video, audioMutedReason } = await resolveMutedAudio(url, scraped.video, scraped.availability, {
+      signal,
+      startedAt,
+    });
+
+    const media: MediaItem[] = scraped.slideImageUrls.map((imageUrl) =>
+      video
+        ? {
+            type: "video",
+            url: video.url,
+            ...(video.audioUrl ? { audioUrl: video.audioUrl } : {}),
+            ...(audioMutedReason ? { audioMutedReason } : {}),
+            thumbnail: imageUrl,
+            dimensions: scraped.dimensions,
+          }
+        : { type: "image", url: imageUrl, thumbnail: imageUrl, dimensions: scraped.dimensions }
+    );
+
+    const shortcode = extractShortcode(url);
+    return {
+      id: shortcode,
+      shortcode,
+      caption: scraped.caption,
+      author: { username: scraped.username, full_name: scraped.username },
+      media,
+    };
   },
 };

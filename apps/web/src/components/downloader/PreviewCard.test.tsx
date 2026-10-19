@@ -206,3 +206,21 @@ describe("PreviewCard - rapid clicks", () => {
     expect(await screen.findByText("Too many requests. Please try again in 7 minutes.")).toBeTruthy();
   });
 });
+
+describe("PreviewCard - a video Instagram muted", () => {
+  const reason = "This music can't be played due to recent licensing changes with the rights holder.";
+
+  it("says so before the download, with Instagram's own reason", () => {
+    renderCard({ ...reel, media: [{ ...reel.media[0]!, audioMutedReason: reason }] });
+    const note = screen.getByRole("note");
+    expect(note.textContent).toContain("This video will download without sound.");
+    expect(note.textContent).toContain(reason);
+    // The download itself is still offered.
+    expect(downloadButton()).toBeTruthy();
+  });
+
+  it("shows nothing for a video with sound", () => {
+    renderCard();
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+});

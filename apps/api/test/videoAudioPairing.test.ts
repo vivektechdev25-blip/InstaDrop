@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { selectVideoAndAudio } from "../src/services/scrapers/mediaExtractionHelpers";
+import { readAudioAvailability, selectVideoAndAudio } from "../src/services/scrapers/mediaExtractionHelpers";
 import { downloadMediaSchema } from "../src/validators/downloadMediaSchema";
 
 /** Minimal MP4 box: [size][type][payload]. */
@@ -45,16 +45,17 @@ afterEach(() => {
 describe("selectVideoAndAudio", () => {
   it("returns a muxed file on its own when there is one", async () => {
     stubProbes({ [MUXED]: ["vide", "soun"], [DASH_AUDIO]: ["soun"] });
-    await expect(selectVideoAndAudio([MUXED], [], [DASH_AUDIO])).resolves.toEqual({ url: MUXED });
+    await expect(selectVideoAndAudio([MUXED], [], [DASH_AUDIO])).resolves.toEqual({ url: MUXED, silent: false });
   });
 
-  // What production sees from a datacenter: only silent renditions.
+  // Video-only renditions plus a separate audio stream in the manifest.
   it("pairs a video-only file with the DASH manifest's audio stream", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     stubProbes({ [VIDEO_ONLY]: ["vide"], [DASH_VIDEO]: ["vide"], [DASH_AUDIO]: ["soun"] });
     await expect(selectVideoAndAudio([VIDEO_ONLY], [DASH_VIDEO], [DASH_AUDIO])).resolves.toEqual({
       url: VIDEO_ONLY,
       audioUrl: DASH_AUDIO,
+      silent: false,
     });
   });
 
@@ -65,6 +66,7 @@ describe("selectVideoAndAudio", () => {
     await expect(selectVideoAndAudio([VIDEO_ONLY], [], [mislabelled, DASH_AUDIO])).resolves.toEqual({
       url: VIDEO_ONLY,
       audioUrl: DASH_AUDIO,
+      silent: false,
     });
   });
 
@@ -75,44 +77,45 @@ describe("selectVideoAndAudio", () => {
     await expect(selectVideoAndAudio([VIDEO_ONLY], [capturedAudio], [])).resolves.toEqual({
       url: VIDEO_ONLY,
       audioUrl: capturedAudio,
+      silent: false,
     });
   });
 
-  it("returns the silent video, with no audioUrl, when no audio exists anywhere", async () => {
+  // What production gets for a reel whose licensed music Instagram muted.
+  it("marks the video silent when it was measured to have no audio and none exists anywhere", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     stubProbes({ [VIDEO_ONLY]: ["vide"] });
-    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [])).resolves.toEqual({ url: VIDEO_ONLY });
-    expect(warn.mock.calls.some(([line]) => String(line).includes("no separate audio stream found"))).toBe(true);
+    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [])).resolves.toEqual({ url: VIDEO_ONLY, silent: true });
+    expect(warn.mock.calls.some(([line]) => String(line).includes("the video will be silent"))).toBe(true);
   });
 
-  // Tells "the reel is silent" apart from "Instagram muted it for this server".
-  it("adds Instagram's own audio flags to the log when no sound is found", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    stubProbes({ [VIDEO_ONLY]: ["vide"] });
-    const describe = vi.fn(async () => "instagram says: has_audio=true should_mute_audio=true");
-    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [], describe)).resolves.toEqual({ url: VIDEO_ONLY });
-    expect(describe).toHaveBeenCalledOnce();
-    expect(warn.mock.calls.some(([line]) => String(line).includes("should_mute_audio=true"))).toBe(true);
-  });
-
-  it("never fails the request because the flags could not be read", async () => {
+  // "Could not tell" must never be reported as "no sound".
+  it("does not call an unprobeable rendition silent", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    stubProbes({ [VIDEO_ONLY]: ["vide"] });
-    const broken = vi.fn(async () => Promise.reject(new Error("page closed")));
-    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [], broken)).resolves.toEqual({ url: VIDEO_ONLY });
-  });
-
-  it("does not read the flags when audio was found", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    stubProbes({ [VIDEO_ONLY]: ["vide"], [DASH_AUDIO]: ["soun"] });
-    const describe = vi.fn(async () => "unused");
-    await selectVideoAndAudio([VIDEO_ONLY], [], [DASH_AUDIO], describe);
-    expect(describe).not.toHaveBeenCalled();
+    stubProbes({});
+    await expect(selectVideoAndAudio([VIDEO_ONLY], [], [])).resolves.toEqual({ url: VIDEO_ONLY, silent: false });
   });
 
   it("returns null when there is no video at all", async () => {
     stubProbes({});
     await expect(selectVideoAndAudio([], [], [DASH_AUDIO])).resolves.toBeNull();
+  });
+});
+
+describe("readAudioAvailability", () => {
+  // The diagnostics it replaced could never fail a scrape; neither may it.
+  it("reports unknown flags, not a failed scrape, when the page cannot be read", async () => {
+    const page = {
+      evaluate: async () => {
+        throw new Error("page.evaluate: Execution context was destroyed");
+      },
+    };
+    await expect(readAudioAvailability(page as never)).resolves.toEqual({
+      hasAudio: null,
+      shouldMuteAudio: null,
+      muteReason: null,
+      licensedMusic: false,
+    });
   });
 });
 

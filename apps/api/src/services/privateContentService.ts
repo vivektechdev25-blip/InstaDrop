@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "playwright";
 import type { InstagramPost, MediaItem } from "@reelsavenow/types";
 import { AppError } from "../errors/AppError";
 import { withBrowserContext } from "./scrapers/browserManager";
+import { DEFAULT_MUTE_REASON } from "./scrapers/regionRecovery";
 import { extractShortcode } from "./scrapers/shortcode";
 import {
   NAVIGATION_TIMEOUT_MS,
@@ -10,7 +11,8 @@ import {
   readPageMeta,
   findProgressiveVideoUrls,
   findDashAudioUrls,
-  describeAudioAvailability,
+  readAudioAvailability,
+  formatAudioAvailability,
   MAX_CAPTURED_MEDIA,
   selectVideoAndAudio,
   stripByteRangeParams,
@@ -216,10 +218,18 @@ async function extractOwnPrivateContent(
       ? await selectVideoAndAudio(
           await findProgressiveVideoUrls(page),
           [...capturedMediaUrls],
-          await findDashAudioUrls(page),
-          () => describeAudioAvailability(page)
+          await findDashAudioUrls(page)
         )
       : null;
+
+  // A silent file is reported with Instagram's reason when Instagram muted
+  // it (licensed music). There is no region re-read here, unlike the public
+  // tier: this page is the owner's signed-in session, and that session is
+  // not something to send through another server.
+  const availability = video?.silent ? await readAudioAvailability(page) : null;
+  if (availability) console.warn(`[mediaExtraction] ${formatAudioAvailability(availability)}`);
+  const audioMutedReason =
+    availability?.shouldMuteAudio === true ? availability.muteReason ?? DEFAULT_MUTE_REASON : undefined;
 
   const media: MediaItem[] = slideImageUrls.map((imageUrl) =>
     video
@@ -227,6 +237,7 @@ async function extractOwnPrivateContent(
           type: "video",
           url: video.url,
           ...(video.audioUrl ? { audioUrl: video.audioUrl } : {}),
+          ...(audioMutedReason ? { audioMutedReason } : {}),
           thumbnail: imageUrl,
           dimensions,
         }

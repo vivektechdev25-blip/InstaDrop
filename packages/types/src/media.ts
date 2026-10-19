@@ -16,6 +16,12 @@ export interface MediaItem {
    * networks). `url` is then video-only; the download joins the two.
    */
   audioUrl?: string;
+  /**
+   * Videos only: set when the file has no sound because Instagram muted it
+   * (usually licensed music not licensed where the server is). Instagram's
+   * own reason, for the site to show alongside the silent video.
+   */
+  audioMutedReason?: string;
 }
 
 export interface InstagramAuthor {

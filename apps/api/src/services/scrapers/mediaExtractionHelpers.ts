@@ -343,6 +343,12 @@ export interface VideoSelection {
   url: string;
   /** Set only when `url` has no audio track and a separate stream was found. */
   audioUrl?: string;
+  /**
+   * True only when `url` was measured to have no audio track and no
+   * separate stream was found: the download will be silent. "Could not
+   * tell" is false - an unprobeable rendition may well carry sound.
+   */
+  silent: boolean;
 }
 
 /**
@@ -356,12 +362,10 @@ export interface VideoSelection {
 export async function selectVideoAndAudio(
   progressiveCandidates: string[],
   capturedCandidates: string[],
-  dashAudioCandidates: string[],
-  /** Extra detail for the log when no sound is found anywhere. */
-  describeAudio?: () => Promise<string>
+  dashAudioCandidates: string[]
 ): Promise<VideoSelection | null> {
   const { muxed, chosen, ranked } = await rankVideoCandidates(progressiveCandidates, capturedCandidates);
-  if (muxed) return { url: muxed };
+  if (muxed) return { url: muxed, silent: false };
   if (!chosen) return null;
 
   let audioUrl: string | undefined;
@@ -378,33 +382,48 @@ export async function selectVideoAndAudio(
 
   if (audioUrl) {
     console.warn("[mediaExtraction] pairing the video-only file with a separate audio stream; the download will join them");
-    return { url: chosen, audioUrl };
+    return { url: chosen, audioUrl, silent: false };
   }
 
-  const detail = describeAudio ? await describeAudio().catch(() => "audio flags unreadable") : null;
+  const chosenTracks = ranked.find((entry) => entry.url === chosen)?.tracks ?? null;
+  const silent = chosenTracks !== null && chosenTracks.audio === 0;
   console.warn(
-    `[mediaExtraction] no separate audio stream found either (${dashAudioCandidates.length} in the DASH manifest); the video will be silent` +
-      (detail ? `; ${detail}` : "")
+    `[mediaExtraction] no separate audio stream found either (${dashAudioCandidates.length} in the DASH manifest); ` +
+      (silent ? "the video will be silent" : "the chosen file could not be probed, so it may still carry sound")
   );
-  return { url: chosen };
+  return { url: chosen, silent };
+}
+
+/** Instagram's own word on whether this page may play sound. */
+export interface AudioAvailability {
+  hasAudio: boolean | null;
+  /** True when Instagram muted the sound for this requester - not "the post has none". */
+  shouldMuteAudio: boolean | null;
+  muteReason: string | null;
+  /** Licensed music from Instagram's library is attached. */
+  licensedMusic: boolean;
 }
 
 /**
- * Instagram's own word on whether this page may play sound, for the log
- * line above. Measured 2026-10-16: a reel with licensed music
- * (`music_info` set) had sound and an audio stream from India, while
- * production (US) got video-only files and a manifest with no audio. The
- * page data carries `has_audio`, `should_mute_audio` and
- * `should_mute_audio_reason`; logging them tells "the reel is silent"
- * apart from "Instagram muted it for this server". Booleans, a short
- * reason string and whether licensed music is attached - no URLs.
+ * Reads `has_audio`, `should_mute_audio` and `should_mute_audio_reason`
+ * from the page data, and whether licensed music is attached.
+ *
+ * Measured 2026-10-16 on a reel with licensed music: from India,
+ * `should_mute_audio=false`, a muxed rendition and an audio stream. From
+ * production in the US, `has_audio=false should_mute_audio=true`, reason
+ * "This music can't be played due to recent licensing changes with the
+ * rights holder.", and only video-only renditions with no audio stream at
+ * all. This is how "the post has no sound" is told apart from "Instagram
+ * muted it for this server's country" - the case region recovery exists for.
  */
-export async function describeAudioAvailability(page: Page): Promise<string> {
-  // String body for the same reason as readPageMeta().
-  return page.evaluate<string>(`
+export async function readAudioAvailability(page: Page): Promise<AudioAvailability> {
+  // Best-effort, like the log line this replaced: flags that cannot be read
+  // are unknown flags, never a failed scrape. String body for the same
+  // reason as readPageMeta().
+  return page.evaluate<AudioAvailability>(`
     (() => {
       const found = {};
-      const keys = ["has_audio", "should_mute_audio", "should_mute_audio_reason", "should_mute_audio_reason_type"];
+      const keys = ["has_audio", "should_mute_audio", "should_mute_audio_reason"];
       let licensedMusic = false;
       function walk(node, depth) {
         if (depth > 18 || node === null || typeof node !== "object") return;
@@ -417,14 +436,25 @@ export async function describeAudioAvailability(page: Page): Promise<string> {
       for (const script of document.querySelectorAll('script[type="application/json"][data-sjs]')) {
         try { walk(JSON.parse(script.textContent || ""), 0); } catch {}
       }
-      const parts = keys.filter((key) => key in found).map((key) => {
-        const value = found[key];
-        return key + "=" + (typeof value === "string" ? JSON.stringify(value.slice(0, 120)) : String(value));
-      });
-      parts.push("licensed_music=" + licensedMusic);
-      return "instagram says: " + parts.join(" ");
+      const bool = (value) => (typeof value === "boolean" ? value : null);
+      const reason = found.should_mute_audio_reason;
+      return {
+        hasAudio: bool(found.has_audio),
+        shouldMuteAudio: bool(found.should_mute_audio),
+        muteReason: typeof reason === "string" && reason.trim() ? reason.trim().slice(0, 200) : null,
+        licensedMusic,
+      };
     })()
-  `);
+  `).catch(() => ({ hasAudio: null, shouldMuteAudio: null, muteReason: null, licensedMusic: false }));
+}
+
+/** For logs: booleans, the short reason and the music flag - never a URL. */
+export function formatAudioAvailability(availability: AudioAvailability): string {
+  const reason = availability.muteReason === null ? "none" : JSON.stringify(availability.muteReason);
+  return (
+    `instagram says: has_audio=${availability.hasAudio} should_mute_audio=${availability.shouldMuteAudio} ` +
+    `should_mute_audio_reason=${reason} licensed_music=${availability.licensedMusic}`
+  );
 }
 
 interface CandidateRanking {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, VolumeX } from "lucide-react";
 import type { InstagramPost } from "@reelsavenow/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -129,6 +129,19 @@ export function PreviewCard({ post }: PreviewCardProps) {
             </>
           ) : null}
         </div>
+
+        {/* Said before the download, not discovered after it: Instagram
+            muted this video (usually licensed music) and the API could not
+            get it with sound. Instagram's own reason, word for word. */}
+        {currentMedia.type === "video" && currentMedia.audioMutedReason ? (
+          <p role="note" className="flex items-start gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-foreground/85">
+            <VolumeX className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              <span className="font-semibold text-foreground">This video will download without sound.</span>{" "}
+              Instagram has muted it: &ldquo;{currentMedia.audioMutedReason}&rdquo;
+            </span>
+          </p>
+        ) : null}
 
         {post.caption ? (
           <p className="line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">
