@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-// Regenerates every brand asset in public/brand/ from the two source files
-// supplied by the owner: public/ig.png (the icon) and public/ig2.png (the
-// "Reel SAVE NOW" wordmark). Run it again whenever either source changes:
+// Regenerates every brand asset in public/brand/, public/favicon.ico and the
+// Open Graph wordmark from the owner's files (2026-10-23):
+//   - public/ig.png, the icon: every square icon and the favicon;
+//   - public/ignew.png, the wordmark for the light theme (navy "now");
+//   - public/ignewdark.png, the same wordmark for the dark theme (white "now").
+// The wordmarks are only resized, never recoloured. Run it again whenever a
+// source changes:
 //
 //   node apps/web/scripts/generate-brand-assets.cjs
 //
@@ -20,9 +24,6 @@ const { chromium } = require(
   require.resolve("playwright", { paths: [path.join(WEB_DIR, "..", "api")] })
 );
 
-// The dark theme's --foreground (globals.css: `.dark { --foreground: 0 0% 98% }`).
-const DARK_TEXT = [250, 250, 250];
-
 const SQUARE_ICONS = [
   // Transparent, filling nearly the whole square: what tabs and the
   // Android launcher's "any" purpose show.
@@ -37,8 +38,8 @@ const SQUARE_ICONS = [
   { file: "icon-maskable-512.png", size: 512, fill: 0.56, background: "#ffffff" },
 ];
 
-// Header display height is 36-40px; 120px covers a 3x screen.
-const WORDMARK_HEIGHT = 120;
+// Header display height is up to 48px; 144px covers a 3x screen.
+const WORDMARK_HEIGHT = 144;
 // The Open Graph card is 1200x630.
 const OG_WORDMARK_HEIGHT = 220;
 
@@ -52,7 +53,7 @@ async function main() {
   const page = await browser.newPage();
 
   const outputs = await page.evaluate(
-    async ({ iconSrc, wordmarkSrc, squareIcons, wordmarkHeight, ogHeight, darkText }) => {
+    async ({ iconSrc, lightSrc, darkSrc, squareIcons, wordmarkHeight, ogHeight }) => {
       async function load(src) {
         const image = new Image();
         image.src = src;
@@ -108,9 +109,7 @@ async function main() {
         // WebP for the header wordmarks: both theme variants are in the page,
         // so their weight lands on every first visit. Lossy at 0.92 keeps the
         // gradient clean at a fraction of the PNG size.
-        const blob = await canvas.convertToBlob(
-          type === "image/webp" ? { type, quality: 0.92 } : { type }
-        );
+        const blob = await canvas.convertToBlob(type === "image/webp" ? { type, quality: 0.92 } : { type });
         const bytes = new Uint8Array(await blob.arrayBuffer());
         let binary = "";
         for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -137,69 +136,35 @@ async function main() {
         results[file] = await encode(square);
       }
 
-      const wordmark = trim(await load(wordmarkSrc));
-
-      /**
-       * The dark-theme variant. Only the "SAVE NOW" lettering changes: it is
-       * the only near-black, colourless artwork in the file (measured: the
-       * icon has none, and every neutral pixel beside it is black, with
-       * anti-aliasing carried in alpha rather than grey). So those pixels
-       * become the dark theme's foreground at their original alpha, and the
-       * gradient is untouched - inverting or filtering would wreck it.
-       */
-      function recolourLettering(source) {
-        const canvas = new OffscreenCanvas(source.width, source.height);
-        const context = canvas.getContext("2d");
-        context.drawImage(source, 0, 0);
-        const image = context.getImageData(0, 0, canvas.width, canvas.height);
-        const { data } = image;
-        let changed = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          if (data[i + 3] === 0) continue;
-          const max = Math.max(data[i], data[i + 1], data[i + 2]);
-          const min = Math.min(data[i], data[i + 1], data[i + 2]);
-          if (max < 64 && max - min < 30) {
-            data[i] = darkText[0];
-            data[i + 1] = darkText[1];
-            data[i + 2] = darkText[2];
-            changed += 1;
-          }
-        }
-        context.putImageData(image, 0, 0);
-        return { canvas, changed };
-      }
-
-      const wordmarkWidth = Math.round((wordmark.width * wordmarkHeight) / wordmark.height);
-      results["wordmark-light.webp"] = await encode(
-        scaleTo(wordmark, wordmarkWidth, wordmarkHeight),
-        "image/webp"
-      );
-      const dark = recolourLettering(wordmark);
-      results["wordmark-dark.webp"] = await encode(
-        scaleTo(dark.canvas, wordmarkWidth, wordmarkHeight),
-        "image/webp"
-      );
-
-      const ogWidth = Math.round((wordmark.width * ogHeight) / wordmark.height);
-      results.og = await encode(scaleTo(dark.canvas, ogWidth, ogHeight));
+      // Trimmed to the same box: the two files differ only in the colour of
+      // "now", so their artwork shares one bounding box and the theme swap
+      // never shifts the header.
+      const light = trim(await load(lightSrc));
+      const dark = trim(await load(darkSrc));
+      const wordmarkWidth = Math.round((light.width * wordmarkHeight) / light.height);
+      results["wordmark-light.webp"] = await encode(scaleTo(light, wordmarkWidth, wordmarkHeight), "image/webp");
+      results["wordmark-dark.webp"] = await encode(scaleTo(dark, wordmarkWidth, wordmarkHeight), "image/webp");
+      // The card's background is near-black, so it uses the dark-theme file.
+      const ogWidth = Math.round((dark.width * ogHeight) / dark.height);
+      results.og = await encode(scaleTo(dark, ogWidth, ogHeight));
 
       return {
         files: results,
         meta: {
           iconTrimmed: [icon.width, icon.height],
-          wordmarkTrimmed: [wordmark.width, wordmark.height],
+          wordmarkTrimmed: { light: [light.width, light.height], dark: [dark.width, dark.height] },
           wordmarkDisplay: [wordmarkWidth, wordmarkHeight],
-          recolouredPixels: dark.changed,
+          ogWordmark: [ogWidth, ogHeight],
         },
       };
     },
     {
       iconSrc: toDataUri("ig.png"),
-      wordmarkSrc: toDataUri("ig2.png"),
+      lightSrc: toDataUri("ignew.png"),
+      darkSrc: toDataUri("ignewdark.png"),
       squareIcons: SQUARE_ICONS,
       wordmarkHeight: WORDMARK_HEIGHT,
       ogHeight: OG_WORDMARK_HEIGHT,
-      darkText: DARK_TEXT,
     }
   );
 

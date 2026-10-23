@@ -50,7 +50,8 @@ const DOWNLOADS: Feature[] = [
     body: (
       <>
         Paste the link to a public Reel — it looks like <Code>instagram.com/reel/…</Code> — and you get a
-        preview of the video. Press Download to save it as an MP4 file.
+        preview of the video. Press Download to save it as an MP4 file, or{" "}
+        <strong className="font-semibold text-foreground">Download Audio (MP3)</strong> to save just the sound.
       </>
     ),
   },
@@ -91,7 +92,7 @@ const PROMISES: Feature[] = [
   {
     icon: Sparkles,
     title: "Original quality",
-    body: "You get the same file Instagram serves for the post, at the highest quality Instagram makes available for it. We don't re-compress, resize or watermark anything.",
+    body: "You get the same file Instagram serves for the post, at the highest quality Instagram makes available for it. We don't re-compress, resize or watermark photos or videos. The one conversion is Download Audio (MP3), which turns a video's sound into an MP3.",
   },
   {
     icon: UserX,
@@ -101,7 +102,7 @@ const PROMISES: Feature[] = [
   {
     icon: ShieldCheck,
     title: "Nothing kept on our servers",
-    body: "The file streams from Instagram's own servers straight to your device. We don't store a copy of what you download.",
+    body: "Most files stream from Instagram's own servers straight to your device. Joining a video to its audio, or making an MP3, uses a temporary file that is deleted as soon as the download finishes or fails. We don't keep a copy of what you download.",
   },
 ];
 
@@ -204,6 +205,17 @@ const PROBLEMS: Problem[] = [
         Many reels use licensed music, and Instagram mutes some songs in some countries. When it has muted a
         reel&apos;s sound, the preview says so, with Instagram&apos;s own reason, before you download. A reel whose
         creator removed the sound has none to download.
+      </>
+    ),
+  },
+  {
+    title: "The audio (MP3) can't be downloaded",
+    message: "This reel has no audio to download.",
+    fix: (
+      <>
+        <strong className="font-semibold text-foreground">Download Audio (MP3)</strong> saves only a video&apos;s
+        sound. It is greyed out when Instagram has muted the reel, and a reel whose creator removed the sound has none
+        to save. Audio downloads are for personal use: the music in a reel usually belongs to its artists and labels.
       </>
     ),
   },

@@ -40,6 +40,18 @@
 - The own-private-content feature's session cookie handling gets its own dedicated, visually distinct section on the Privacy Policy (a tinted `Card`-based callout with a small pill tag) rather than a footnote, given how sensitive that data is.
 - Confirmed live via Playwright across all 5 breakpoints, both themes (30 combinations): zero horizontal overflow, zero console errors, desktop TOC correctly visible only at `lg`+, mobile "Jump to section" correctly visible only below it. Scroll-spy and the mobile accordion's open/close behavior both confirmed via real interaction (a TOC link click both scrolls to and highlights its section; the mobile trigger's `data-state` genuinely flips closed→open on click), not just checked for DOM presence.
 
+## Download Audio (MP3) — 2026-10-19
+
+- [x] Under the preview of a video, **Download Audio (MP3)** saves only the sound.
+  - **Backend:** `GET /api/v1/download?…&format=mp3` converts the separate audio stream when there is one, otherwise the video's own sound. It runs ffmpeg with libmp3lame at 192kbps. Instagram's audio is AAC at roughly 54–62kbps, so the MP3 is never better than the source.
+  - **Checks:** before converting, the file's own track list is read. A file with no audio track gets `422 NO_AUDIO` and ffmpeg never runs. The output is checked for real MP3 frames before it is sent.
+  - **Limits:** at most `AUDIO_TRANSCODE_MAX_CONCURRENCY` conversions at once (default 2). The temporary file is removed on success, error, timeout and client disconnect.
+  - **Frontend:** the button sits next to the video download and has its own loading state. It is shown for videos only, and greyed out with Instagram's reason when Instagram has muted the reel.
+  - **Site copy:** the homepage (How it works, Every content type, FAQ and FAQPage schema), the meta description, the `WebApplication` schema's `featureList` and the Support page describe it.
+  - **Legal pages:** Terms mention personal use. The Privacy Policy, Terms and the "Nothing kept on our servers" copy now say that joining audio and making an MP3 use a temporary file, deleted right after. The copy used to claim nothing was ever written on the server.
+- Verified in the production Docker image on two real reels: real MP3s of the right length, no temp folders left. The `NO_AUDIO` path was checked against real ffmpeg 4.4 and 9.0 output. See [API.md](./API.md#get-apiv1download).
+- **Not verified:** iOS Safari's handling of the blob download.
+
 ## Explicitly out of MVP scope (post-MVP roadmap)
 
 - Stories / Highlights parser (own-account Stories specifically evaluated and deferred 2026-08-05 as part of the own-private-content feature — see above)

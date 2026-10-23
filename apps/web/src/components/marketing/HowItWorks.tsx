@@ -26,7 +26,7 @@ const STEPS: Step[] = [
   {
     icon: Download,
     title: "Download",
-    description: "One tap saves the original file straight to your device.",
+    description: "One tap saves the original file straight to your device — or just a Reel's audio, as an MP3.",
   },
 ];
 

@@ -77,8 +77,10 @@ export default function PrivacyPolicyPage() {
             <li className="list-disc">
               No server-side storage of Instagram media. When you paste a link, our
               backend fetches the corresponding media directly from Instagram&apos;s own
-              content delivery network and streams it straight to your browser. It&apos;s
-              never saved, cached, or copied onto our servers at any point.
+              content delivery network and streams it straight to your browser. Joining a
+              video to its separate audio track, or converting a Reel&apos;s audio to MP3,
+              needs a temporary file on our server; it is deleted as soon as the download
+              finishes or fails. Nothing is kept, cached, or logged.
             </li>
             <li className="list-disc">
               No advertising or tracking cookies, and no third-party analytics or

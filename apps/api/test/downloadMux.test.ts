@@ -7,6 +7,23 @@ import type { Response as ExpressResponse } from "express";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { readMp4Tracks } from "../src/services/scrapers/mediaExtractionHelpers";
 
+// Every temp folder the service makes, so cleanup is checked on exactly
+// those - counting reelsavenow-* folders raced the other download test
+// files, which make and remove folders of the same name in parallel.
+const created = vi.hoisted(() => ({ dirs: [] as string[] }));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    mkdtemp: async (prefix: string) => {
+      const dir = await actual.mkdtemp(prefix);
+      created.dirs.push(dir);
+      return dir;
+    },
+  };
+});
+
 const VIDEO = "https://scontent.cdninstagram.com/v.mp4";
 const AUDIO = "https://instagram.fdel27-6.fna.fbcdn.net/a.mp4";
 
@@ -57,8 +74,8 @@ async function loadService(ffmpegPath?: string) {
   return (await import("../src/services/downloadService")).downloadService;
 }
 
-/** Leftover temp folders from this service, to prove cleanup. */
-const leftovers = () => fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith("reelsavenow-"));
+/** The temp folders this test's downloads made that still exist. */
+const leftovers = () => created.dirs.filter((dir) => fs.existsSync(dir));
 
 const ffmpegAvailable = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status === 0;
 let videoOnly: Buffer;
@@ -84,6 +101,7 @@ afterAll(() => {
 });
 
 afterEach(() => {
+  created.dirs.length = 0;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -93,7 +111,6 @@ describe("download with a separate audio stream", () => {
     const service = await loadService();
     stubFetch({ [VIDEO]: videoOnly, [AUDIO]: audioOnly });
     expect(readMp4Tracks(videoOnly)).toEqual({ video: 1, audio: 0 });
-    const before = leftovers().length;
 
     const res = createFakeResponse();
     await service.streamToResponse(VIDEO, "reel.mp4", asExpress(res), AUDIO);
@@ -103,7 +120,8 @@ describe("download with a separate audio stream", () => {
     expect(res.headers["content-type"]).toBe("video/mp4");
     expect(res.headers["content-length"]).toBe(String(file.length));
     expect(res.headers["content-disposition"]).toBe('attachment; filename="reel.mp4"');
-    expect(leftovers().length).toBe(before);
+    expect(created.dirs).toHaveLength(1);
+    expect(leftovers()).toEqual([]);
   });
 
   // Never worse than before this existed: the video still downloads.
@@ -131,12 +149,12 @@ describe("download with a separate audio stream", () => {
 
   it("fails with a 502, sending nothing, when the video itself cannot be fetched", async () => {
     const service = await loadService();
-    const before = leftovers().length;
     stubFetch({ [VIDEO]: () => new Response("gone", { status: 403 }), [AUDIO]: Buffer.from("audio-bytes") });
 
     const res = createFakeResponse();
     await expect(service.streamToResponse(VIDEO, "reel.mp4", asExpress(res), AUDIO)).rejects.toMatchObject({ statusCode: 502 });
     expect(res.body().length).toBe(0);
-    expect(leftovers().length).toBe(before);
+    expect(created.dirs).toHaveLength(1);
+    expect(leftovers()).toEqual([]);
   });
 });

@@ -29,6 +29,7 @@ describe("shared DTO contract", () => {
       | "PRIVATE_ACCOUNT"
       | "RATE_LIMITED"
       | "SERVER_ERROR"
+      | "NO_AUDIO"
       | "SESSION_EXPIRED"
       | "ACCESS_DENIED"
     >();

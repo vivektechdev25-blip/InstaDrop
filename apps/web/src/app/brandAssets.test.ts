@@ -55,4 +55,10 @@ describe("brand assets", () => {
   it("ships the Open Graph wordmark beside its route", () => {
     expect(existsSync(join(WEB, "src/app/og-wordmark.png"))).toBe(true);
   });
+
+  // The owner's light and dark wordmarks (2026-10-23) must be the same size,
+  // or the header would jump when the theme changes.
+  it("has light and dark wordmark sources of the same size", () => {
+    expect(pngSize(join(PUBLIC, "ignew.png"))).toEqual(pngSize(join(PUBLIC, "ignewdark.png")));
+  });
 });

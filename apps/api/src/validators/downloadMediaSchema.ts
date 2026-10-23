@@ -30,4 +30,7 @@ export const downloadMediaSchema = z.object({
       message: "Audio URL must be a direct Instagram CDN media link.",
     })
     .optional(),
+  // Save only the sound, as an MP3: from `audio` when given, else from
+  // `url`. The only format offered, so anything else is a 400.
+  format: z.enum(["mp3"]).optional(),
 });

@@ -20,8 +20,8 @@ describe("BrandLogo", () => {
   it("reserves its box before the image loads", () => {
     const { container } = render(<BrandLogo />);
     for (const image of Array.from(container.querySelectorAll("img"))) {
-      expect(image.getAttribute("width")).toBe("348");
-      expect(image.getAttribute("height")).toBe("120");
+      expect(image.getAttribute("width")).toBe("634");
+      expect(image.getAttribute("height")).toBe("144");
     }
   });
 

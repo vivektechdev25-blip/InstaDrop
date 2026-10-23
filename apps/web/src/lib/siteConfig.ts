@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "ReelSaveNow",
   title: "ReelSaveNow — Instagram Photo & Video Downloader",
   description:
-    "Download public Instagram photos, reels, videos, and carousel posts in original quality. No login required.",
+    "Download public Instagram photos, reels, videos and carousels in original quality, or save a Reel's audio as MP3. No login required.",
   // Plain-text version of the hero headline - used anywhere that can't
   // render the hero's own styled JSX (e.g. the OG image). The hero's
   // <h1> in DownloaderPage.tsx highlights "original quality" in its own

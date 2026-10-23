@@ -1,6 +1,8 @@
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
+import { AppError } from "../src/errors/AppError";
+import { downloadService } from "../src/services/downloadService";
 
 const ORIGIN = "https://reelsavenow.example";
 const newApp = () => createApp({ corsOrigins: [ORIGIN] });
@@ -235,5 +237,58 @@ describe("request parsing", () => {
     for (const header of ["retry-after", "ratelimit-reset", "ratelimit-remaining"]) {
       expect(exposed).toContain(header);
     }
+  });
+});
+
+describe("download route: video or MP3", () => {
+  const url = "https://scontent.cdninstagram.com/v/a.mp4";
+  const audio = "https://instagram.fdel27-6.fna.fbcdn.net/v/a-audio.mp4";
+  const answered = async (_source: string, _filename: string, res: import("express").Response) => {
+    res.status(204).end();
+  };
+
+  // A request without `format` is exactly what it was before MP3 existed.
+  it("streams the media as before when no format is asked for", async () => {
+    const stream = vi.spyOn(downloadService, "streamToResponse").mockImplementation(answered);
+    const mp3 = vi.spyOn(downloadService, "mp3ToResponse").mockImplementation(answered);
+
+    await request(newApp()).get("/api/v1/download").query({ url, filename: "a.mp4", audio }).expect(204);
+
+    expect(stream).toHaveBeenCalledWith(url, "a.mp4", expect.anything(), audio);
+    expect(mp3).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the separate audio stream, when there is one", { url, audio }, audio],
+    ["the video's own sound otherwise", { url }, url],
+  ])("converts %s to MP3", async (_label, sources, expected) => {
+    const mp3 = vi.spyOn(downloadService, "mp3ToResponse").mockImplementation(answered);
+
+    await request(newApp()).get("/api/v1/download").query({ ...sources, filename: "a.mp3", format: "mp3" }).expect(204);
+
+    expect(mp3).toHaveBeenCalledWith(expected, "a.mp3", expect.anything());
+  });
+
+  it("answers 400 for any other format, before fetching anything", async () => {
+    const stream = vi.spyOn(downloadService, "streamToResponse");
+    const mp3 = vi.spyOn(downloadService, "mp3ToResponse");
+
+    const response = await request(newApp()).get("/api/v1/download").query({ url, filename: "a.wav", format: "wav" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("INVALID_URL");
+    expect(stream).not.toHaveBeenCalled();
+    expect(mp3).not.toHaveBeenCalled();
+  });
+
+  it("answers a reel with no sound with a 422 the site can explain", async () => {
+    vi.spyOn(downloadService, "mp3ToResponse").mockRejectedValue(
+      new AppError("NO_AUDIO", "This reel has no audio to download.", 422)
+    );
+
+    const response = await request(newApp()).get("/api/v1/download").query({ url, filename: "a.mp3", format: "mp3" });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ success: false, code: "NO_AUDIO", message: "This reel has no audio to download." });
   });
 });

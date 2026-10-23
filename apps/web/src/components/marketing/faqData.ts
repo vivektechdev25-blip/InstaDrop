@@ -21,7 +21,12 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   },
   {
     question: "What content types are supported?",
-    answer: "Photos, Reels, videos, and carousel (multi-photo/video) posts.",
+    answer: "Photos, Reels, videos, and carousel (multi-photo/video) posts — and the audio of a Reel or video, saved as MP3.",
+  },
+  {
+    question: "Can I download just the audio of a Reel as MP3?",
+    answer:
+      "Yes. Under the preview of a Reel or video, press Download Audio (MP3) to save only its sound. It's for personal use: the music in a Reel usually belongs to its artists and labels. When Instagram has muted a Reel, usually for licensed music, there is no sound to save, so the button is greyed out and the preview shows Instagram's reason.",
   },
   {
     question: "Can I download private content?",

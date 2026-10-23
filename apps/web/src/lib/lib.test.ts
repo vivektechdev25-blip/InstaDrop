@@ -157,6 +157,20 @@ describe("download URL builders", () => {
     expect(built.pathname).toBe("/api/v1/download");
     expect(built.searchParams.get("url")).toBe(video.url);
     expect(built.searchParams.get("filename")).toBe("reelsavenow_ABC.mp4");
+    expect(built.searchParams.has("format")).toBe(false);
+  });
+
+  it("names an MP3 by the same pattern", () => {
+    expect(buildDownloadFilename("ABC", video, 0, 1, { format: "mp3" })).toBe("reelsavenow_ABC.mp3");
+    expect(buildDownloadFilename("ABC", video, 1, 3, { format: "mp3" })).toBe("reelsavenow_ABC_2.mp3");
+  });
+
+  it("asks for an MP3, keeping the separate audio stream for the API to convert", () => {
+    const audioUrl = "https://x.fbcdn.net/a.mp4?c=3";
+    const built = new URL(buildDownloadUrl({ ...video, audioUrl }, "reelsavenow_ABC.mp3", { format: "mp3" }));
+    expect(built.searchParams.get("format")).toBe("mp3");
+    expect(built.searchParams.get("url")).toBe(video.url);
+    expect(built.searchParams.get("audio")).toBe(audioUrl);
   });
 });
 
