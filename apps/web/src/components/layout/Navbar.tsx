@@ -37,7 +37,7 @@ export function Navbar() {
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       <nav className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <BrandLogo className="h-9 sm:h-10" />
+          <BrandLogo className="h-9 min-[360px]:h-11 sm:h-12" />
         </Link>
 
         <div className="hidden items-center gap-6 md:flex">

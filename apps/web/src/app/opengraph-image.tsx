@@ -5,11 +5,11 @@ export const runtime = "edge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// og-wordmark.png is the dark-theme wordmark ("SAVE NOW" in the theme's
-// foreground), generated beside this file by scripts/generate-brand-assets.cjs
+// og-wordmark.png is the dark-theme wordmark (public/ignewdark.png, white
+// "now"), generated beside this file by scripts/generate-brand-assets.cjs
 // because the card's background is the dark theme's. Loaded through
 // import.meta.url so the bundler ships it with the route on any host.
-const WORDMARK_WIDTH = 638;
+const WORDMARK_WIDTH = 968;
 const WORDMARK_HEIGHT = 220;
 
 export default async function OpengraphImage() {

@@ -2,9 +2,15 @@
 
 Established 2026-08-05 as a systematic refinement pass — audited the existing UI against common "looks unpolished" culprits first (see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md#ui-polish-pass-2026-08-05) for the findings), then built the tokens below to fix them. This is the source of truth going forward: new components should reach for these tokens rather than picking ad-hoc values, the same failure mode that caused the original audit findings.
 
-## Logo
+## Logo and icon
 
-Two source files, supplied by the owner and kept as-is: `apps/web/public/ig.png` (the icon, 329×318) and `apps/web/public/ig2.png` (the "Reel SAVE NOW" wordmark, 863×318). Everything the site serves is generated from them into `public/brand/` by:
+Three source files, supplied by the owner on 2026-10-23 and kept as-is in `apps/web/public/`:
+
+- `ignew.png` — the "reelsavenow" wordmark for the **light** theme (navy "now"), 1448×329;
+- `ignewdark.png` — the same wordmark for the **dark** theme (white "now"), same size, identical apart from "now";
+- `ig.png` — the icon, cut from the wordmark (378×329).
+
+Everything the site serves is generated from them by:
 
 ```
 node apps/web/scripts/generate-brand-assets.cjs
@@ -12,16 +18,17 @@ node apps/web/scripts/generate-brand-assets.cjs
 
 | File | Used for |
 |---|---|
-| `wordmark-light.webp` / `wordmark-dark.webp` | Header (36–40px tall) and footer (32px) via `<BrandLogo>`, swapped by the `dark` class on `<html>` |
+| `wordmark-light.webp` / `wordmark-dark.webp` | Header (36px on phones under 360px, 44px on other phones, 48px from 640px) and footer (40px) via `<BrandLogo>`, swapped by the `dark` class on `<html>` |
 | `icon-32.png`, `icon-48.png`, `icon-192.png` | Favicons — 32 for tabs, 48 for search results, 192 for the rest |
+| `favicon.ico` | `/favicon.ico` for crawlers, built from the 32px and 48px icons |
 | `apple-icon.png` | iOS home screen — opaque white, since iOS draws transparency as black |
 | `icon-192.png`, `icon-512.png` | Manifest, `purpose: any` |
 | `icon-maskable-512.png` | Manifest, `purpose: maskable` — artwork inside the 40%-radius safe circle |
-| `src/app/og-wordmark.png` | Open Graph card |
+| `src/app/og-wordmark.png` | Open Graph card — the dark-theme wordmark, since the card is near-black |
 
-**Dark theme.** The wordmark's "SAVE NOW" is black and disappears on the dark background. The dark variant recolours only near-black, colourless pixels to the dark theme's `--foreground` (`#fafafa`) at their original alpha. That is safe because it was measured first: the icon artwork contains no such pixels, and the lettering's anti-aliasing is carried in alpha rather than grey, so there is no halo. Never invert or CSS-filter the artwork — it wrecks the gradient.
+The wordmarks are only resized, never recoloured: the owner supplies each theme's version. The icon is colourful on a transparent background, so one set serves both themes.
 
-**Known limit:** the source icon is 329×318, so the 512px icons are upscaled about 1.5× and slightly soft on high-density splash screens. A source of 1024px or more fixes it; rerun the script.
+**Known limit:** the source icon is 378×329, so the 512px icons are upscaled about 1.4× and slightly soft on high-density splash screens. A source of 1024px or more fixes it; rerun the script.
 
 ## Brand colours (2026-10-15)
 
