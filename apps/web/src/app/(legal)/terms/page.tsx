@@ -47,9 +47,12 @@ export default function TermsPage() {
           <p>
             ReelSaveNow&apos;s main tool lets you preview and download media from{" "}
             <strong>public</strong> Instagram posts, reels, videos, and carousels by
-            pasting a link. It works entirely without an account, and doesn&apos;t store
-            any Instagram media on its own servers — everything is streamed directly from
-            Instagram&apos;s content delivery network to your browser.
+            pasting a link, or save just the audio of a Reel as MP3. It works entirely
+            without an account, and doesn&apos;t keep any Instagram media on its own
+            servers — most downloads stream directly from Instagram&apos;s content delivery
+            network to your browser. Joining a separate audio track, or converting audio to
+            MP3, uses a temporary file that is deleted as soon as the download finishes or
+            fails.
           </p>
           <p>
             A separate feature lets you download your own private Reels and posts, using
@@ -70,6 +73,10 @@ export default function TermsPage() {
           </p>
           <ul className="flex flex-col gap-2 pl-5">
             <li className="list-disc">Use ReelSaveNow to access, download, or redistribute content you don&apos;t have the rights to.</li>
+            <li className="list-disc">
+              Use the audio (MP3) download beyond personal use. The music in a reel usually belongs to its artists
+              and labels, and you are responsible for having the rights to anything you use it for.
+            </li>
             <li className="list-disc">
               Attempt to use the own-private-content feature to access another
               person&apos;s private account, or to circumvent Instagram&apos;s own privacy

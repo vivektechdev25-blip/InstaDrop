@@ -3,6 +3,7 @@ import { Inter, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { siteConfig } from "@/lib/siteConfig";
+import { APPLICATION_JSON_LD } from "@/lib/structuredData";
 
 // Downloaded at build time and served from this origin (the CSP allows
 // no third-party font hosts).
@@ -105,24 +106,6 @@ const THEME_INIT_SCRIPT = `
   } catch (error) {}
 })();
 `;
-
-const APPLICATION_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "WebApplication",
-  name: siteConfig.name,
-  description: siteConfig.description,
-  url: siteConfig.url,
-  // Real, deployed asset (apps/web/public/brand/icon-512.png) - not a
-  // fabricated/placeholder image reference.
-  image: `${siteConfig.url}/brand/icon-512.png`,
-  applicationCategory: "MultimediaApplication",
-  operatingSystem: "Any",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "USD",
-  },
-};
 
 // The name Google shows above the title in search results. Without it,
 // Google guesses the site name from the page - which is how results kept

@@ -12,11 +12,11 @@ describe("sitemap", () => {
 
   it("reports each page's real last change, not the time of the request", () => {
     expect(sitemap().map((entry) => entry.lastModified)).toEqual([
-      "2026-10-16",
-      "2026-10-16",
+      "2026-10-19",
+      "2026-10-19",
       "2026-09-26",
-      "2026-08-05",
-      "2026-08-05",
+      "2026-10-19",
+      "2026-10-19",
     ]);
     // A fresh new Date() per call would make these differ.
     expect(JSON.stringify(sitemap())).toBe(JSON.stringify(sitemap()));
@@ -26,7 +26,7 @@ describe("sitemap", () => {
     const byPath = Object.fromEntries(sitemap().map((entry) => [entry.url.replace(siteConfig.url, ""), entry]));
     expect(byPath["/privacy-policy"]!.lastModified).toBe(PRIVACY_POLICY_UPDATED);
     expect(byPath["/terms"]!.lastModified).toBe(TERMS_UPDATED);
-    expect(formatLegalDate(PRIVACY_POLICY_UPDATED)).toBe("August 5, 2026");
+    expect(formatLegalDate("2026-08-05")).toBe("August 5, 2026");
   });
 
   it("ranks the pages and leaves out everything noindex", () => {

@@ -108,9 +108,23 @@ Fails closed: if the requested content's owner can't be determined at all (not j
 
 Binary streaming, proxies the media file straight to the browser.
 
-**Query params:** `url` (encoded CDN URL), `filename` (suggested download filename)
+**Query params:**
 
-Sets `Content-Disposition: attachment` to force download instead of inline playback. Media is streamed directly from the upstream CDN response to the client response — never written to disk or buffered fully in memory on the server.
+- `url` — encoded CDN URL.
+- `filename` — suggested download filename.
+- `audio` (optional) — a separate audio-only stream for a video-only `url`; the two are joined into one MP4.
+- `format` (optional) — `mp3` is the only accepted value; anything else is `400 INVALID_URL`.
+
+Sets `Content-Disposition: attachment` to force download instead of inline playback. A plain download is streamed directly from the upstream CDN response to the client response, never written to disk or buffered fully in memory on the server. A join, or an MP3, is assembled in a private temp folder that is always removed afterwards, on success, error, timeout and client disconnect.
+
+**`format=mp3` — the sound only.**
+
+- **Source:** `audio` when given, otherwise `url`. Both are under the same allowlist, limits and timeouts as any download.
+- **Check before converting:** the file's own track list decides, not its URL's extension. No audio track gives `422 NO_AUDIO` ("This reel has no audio to download."), without running ffmpeg. This is what a reel Instagram has muted, or one whose creator removed the sound, gets.
+- **Conversion:** a re-encode with ffmpeg and libmp3lame at 192kbps. Instagram's audio is AAC, so an MP3 is never a plain copy.
+- **Response:** `Content-Type: audio/mpeg`, an exact `Content-Length`, and the filename's extension replaced by `.mp3`.
+- **Failures:** if ffmpeg fails or times out (`DOWNLOAD_MUX_TIMEOUT_MS`), or its output has no audio frames, the answer is `502` and nothing is sent.
+- **Capacity:** at most `AUDIO_TRANSCODE_MAX_CONCURRENCY` conversions at once (default 2); beyond that, `503`.
 
 **Security:** `url` must be **https** on a `*.cdninstagram.com` / `*.fbcdn.net` host. This is enforced twice, by one shared allowlist (`apps/api/src/constants/allowedCdnHosts.ts`): once by `downloadMediaSchema.ts` on the caller-supplied URL before any request is made, and again per redirect hop in `downloadService.ts`, which requests with `redirect: "manual"` so a validated URL can't 302 off the allowlist (max 5 hops). Without this the endpoint would be an open proxy for arbitrary URLs (SSRF risk). A non-Instagram-CDN URL returns `400 INVALID_URL`.
 

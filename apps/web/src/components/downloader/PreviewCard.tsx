@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, VolumeX } from "lucide-react";
+import { useId, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Music, VolumeX } from "lucide-react";
 import type { InstagramPost } from "@reelsavenow/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -17,11 +17,13 @@ export interface PreviewCardProps {
 /**
  * The API's error responses are JSON envelopes, not media. Reading the
  * real message out of one is what lets this surface "too many requests"
- * instead of writing that envelope to disk as a .mp4 (see handleDownload).
+ * instead of writing that envelope to disk as a .mp4 (see save).
  */
 export function PreviewCard({ post }: PreviewCardProps) {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSavingAudio, setIsSavingAudio] = useState(false);
+  const mutedNoteId = useId();
   const { toast } = useToast();
   const slideCount = post.media.length;
   const currentMedia = post.media[slideIndex];
@@ -29,18 +31,14 @@ export function PreviewCard({ post }: PreviewCardProps) {
   if (!currentMedia) return null;
 
   const filename = buildDownloadFilename(post.shortcode, currentMedia, slideIndex, slideCount);
+  const audioFilename = buildDownloadFilename(post.shortcode, currentMedia, slideIndex, slideCount, { format: "mp3" });
+  // Instagram muted it: there is no sound to save, and ffmpeg can't make it up.
+  const audioMuted = currentMedia.type === "video" && Boolean(currentMedia.audioMutedReason);
 
   const goToSlide = (nextIndex: number) => setSlideIndex(((nextIndex % slideCount) + slideCount) % slideCount);
 
-  async function handleDownload() {
-    // A video download takes real seconds, during which the button stays
-    // clickable; a second click would start a duplicate transfer and spend
-    // another request from the download rate limit's budget.
-    if (isDownloading || !currentMedia) return;
-
-    const downloadUrl = buildDownloadUrl(currentMedia, filename);
-    setIsDownloading(true);
-
+  /** Fetches one download and saves it as `name`, or says why it failed. */
+  async function save(downloadUrl: string, name: string, failureTitle: string): Promise<void> {
     try {
       const response = await fetch(downloadUrl);
 
@@ -51,7 +49,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
       if (!response.ok) {
         const failure = await describeFetchFailure(response);
         toast({
-          title: response.status === 429 ? "Too many requests" : "Download failed",
+          title: response.status === 429 ? "Too many requests" : failureTitle,
           description: failure.message,
           variant: "destructive",
         });
@@ -62,7 +60,7 @@ export function PreviewCard({ post }: PreviewCardProps) {
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = blobUrl;
-      anchor.download = filename;
+      anchor.download = name;
       anchor.style.display = "none";
       document.body.appendChild(anchor);
       anchor.click();
@@ -74,8 +72,32 @@ export function PreviewCard({ post }: PreviewCardProps) {
       // lets the browser perform the download itself, which doesn't need
       // CORS to succeed.
       window.open(downloadUrl, "_blank");
+    }
+  }
+
+  async function handleDownload() {
+    // A video download takes real seconds, during which the button stays
+    // clickable; a second click would start a duplicate transfer and spend
+    // another request from the download rate limit's budget.
+    if (isDownloading || !currentMedia) return;
+
+    setIsDownloading(true);
+    try {
+      await save(buildDownloadUrl(currentMedia, filename), filename, "Download failed");
     } finally {
       setIsDownloading(false);
+    }
+  }
+
+  // Its own state, so the video can still be downloaded while it converts.
+  async function handleAudioDownload() {
+    if (isSavingAudio || audioMuted || !currentMedia) return;
+
+    setIsSavingAudio(true);
+    try {
+      await save(buildDownloadUrl(currentMedia, audioFilename, { format: "mp3" }), audioFilename, "Audio download failed");
+    } finally {
+      setIsSavingAudio(false);
     }
   }
 
@@ -133,8 +155,12 @@ export function PreviewCard({ post }: PreviewCardProps) {
         {/* Said before the download, not discovered after it: Instagram
             muted this video (usually licensed music) and the API could not
             get it with sound. Instagram's own reason, word for word. */}
-        {currentMedia.type === "video" && currentMedia.audioMutedReason ? (
-          <p role="note" className="flex items-start gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-foreground/85">
+        {audioMuted ? (
+          <p
+            id={mutedNoteId}
+            role="note"
+            className="flex items-start gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-foreground/85"
+          >
             <VolumeX className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <span>
               <span className="font-semibold text-foreground">This video will download without sound.</span>{" "}
@@ -149,20 +175,46 @@ export function PreviewCard({ post }: PreviewCardProps) {
           </p>
         ) : null}
 
-        <Button type="button" onClick={handleDownload} disabled={isDownloading} className="w-full">
-          {isDownloading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Downloading…
-            </>
-          ) : (
-            <>
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download {currentMedia.type === "video" ? "video" : "photo"}
-              {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button type="button" onClick={handleDownload} disabled={isDownloading} className="w-full">
+            {isDownloading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Downloading…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Download {currentMedia.type === "video" ? "video" : "photo"}
+                {slideCount > 1 ? ` (${slideIndex + 1}/${slideCount})` : ""}
+              </>
+            )}
+          </Button>
+
+          {currentMedia.type === "video" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAudioDownload}
+              disabled={isSavingAudio || audioMuted}
+              aria-busy={isSavingAudio}
+              aria-describedby={audioMuted ? mutedNoteId : undefined}
+              className="w-full"
+            >
+              {isSavingAudio ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Converting to MP3…
+                </>
+              ) : (
+                <>
+                  <Music className="h-4 w-4" aria-hidden="true" />
+                  Download Audio (MP3)
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );

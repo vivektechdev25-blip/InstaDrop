@@ -38,7 +38,8 @@ function renderCard(post: InstagramPost = reel) {
   );
 }
 
-const downloadButton = () => screen.getByRole("button", { name: /download|downloading/i });
+// The video/photo button - not "Download Audio (MP3)" beside it.
+const downloadButton = () => screen.getByRole("button", { name: /^(download (video|photo)|downloading)/i });
 
 let createObjectURL: ReturnType<typeof vi.fn>;
 let revokeObjectURL: ReturnType<typeof vi.fn>;
@@ -222,5 +223,115 @@ describe("PreviewCard - a video Instagram muted", () => {
   it("shows nothing for a video with sound", () => {
     renderCard();
     expect(screen.queryByRole("note")).toBeNull();
+  });
+});
+
+describe("PreviewCard - Download Audio (MP3)", () => {
+  const audioButton = () => screen.getByRole("button", { name: /download audio \(mp3\)|converting to mp3/i });
+  const requested = (fetchMock: ReturnType<typeof vi.fn>, call = 0) => new URL(String(fetchMock.mock.calls[call]![0]));
+  const apiError = (status: number, code: string, message: string) =>
+    Response.json({ success: false, message, data: null, errors: null, code }, { status });
+
+  it("is offered for a video, and not for photos", () => {
+    renderCard();
+    expect(audioButton()).toBeTruthy();
+    cleanup();
+
+    renderCard(carousel);
+    expect(screen.queryByRole("button", { name: /download audio/i })).toBeNull();
+  });
+
+  it("asks the API for an MP3 and saves it under an .mp3 name", async () => {
+    const fetchMock = vi.fn(async () => new Response(new Blob(["mp3-bytes"]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard();
+
+    fireEvent.click(audioButton());
+
+    await waitFor(() => expect(savedFilenames).toEqual(["reelsavenow_ABC123.mp3"]));
+    const url = requested(fetchMock);
+    expect(url.searchParams.get("format")).toBe("mp3");
+    expect(url.searchParams.get("url")).toBe(reel.media[0]!.url);
+    expect(url.searchParams.get("filename")).toBe("reelsavenow_ABC123.mp3");
+  });
+
+  it("passes the separate audio stream along when the reel has one", async () => {
+    const fetchMock = vi.fn(async () => new Response(new Blob(["mp3-bytes"]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const audioUrl = "https://instagram.fdel27-4.fna.fbcdn.net/o1/v/t2/audio.mp4";
+    renderCard({ ...reel, media: [{ ...reel.media[0]!, audioUrl }] });
+
+    fireEvent.click(audioButton());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(requested(fetchMock).searchParams.get("audio")).toBe(audioUrl);
+  });
+
+  it("shows that it is converting, and starts one request however often it is clicked", async () => {
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => (finish = resolve)));
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard();
+
+    fireEvent.click(audioButton());
+    fireEvent.click(audioButton());
+
+    await waitFor(() => expect(audioButton()).toHaveProperty("disabled", true));
+    expect(audioButton().textContent).toContain("Converting to MP3");
+    expect(audioButton().getAttribute("aria-busy")).toBe("true");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish(new Response(new Blob(["x"]), { status: 200 })));
+    await waitFor(() => expect(audioButton()).toHaveProperty("disabled", false));
+    expect(audioButton().textContent).toContain("Download Audio (MP3)");
+  });
+
+  it.each([
+    ["the reel has no audio", 422, "NO_AUDIO", "This reel has no audio to download."],
+    ["the conversion fails", 502, "SERVER_ERROR", "We couldn't convert the audio. Please try again."],
+  ])("says so, and saves nothing, when %s", async (_label, status, code, message) => {
+    vi.stubGlobal("fetch", vi.fn(async () => apiError(status, code, message)));
+    renderCard();
+
+    fireEvent.click(audioButton());
+
+    expect(await screen.findByText("Audio download failed")).toBeTruthy();
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(anchorClick).not.toHaveBeenCalled();
+    await waitFor(() => expect(audioButton()).toHaveProperty("disabled", false));
+  });
+
+  // Instagram muted it: there is no sound to save, and the reason is on screen.
+  it("is disabled, pointing at Instagram's reason, for a reel Instagram muted", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const reason = "This music can't be played due to recent licensing changes with the rights holder.";
+    renderCard({ ...reel, media: [{ ...reel.media[0]!, audioMutedReason: reason }] });
+
+    const button = audioButton();
+    expect(button).toHaveProperty("disabled", true);
+    const note = document.getElementById(button.getAttribute("aria-describedby")!);
+    expect(note?.textContent).toContain(reason);
+
+    fireEvent.click(button);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the video download working while the audio converts", async () => {
+    const fetchMock = vi.fn((input: string) =>
+      new URL(input).searchParams.get("format") === "mp3"
+        ? new Promise<Response>(() => {})
+        : Promise.resolve(new Response(new Blob(["mp4-bytes"]), { status: 200 }))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard();
+
+    fireEvent.click(audioButton());
+    await waitFor(() => expect(audioButton()).toHaveProperty("disabled", true));
+    fireEvent.click(downloadButton());
+
+    await waitFor(() => expect(savedFilenames).toEqual(["reelsavenow_ABC123.mp4"]));
+    expect(requested(fetchMock, 1).searchParams.get("format")).toBeNull();
   });
 });

@@ -29,7 +29,8 @@ const FEATURES: Feature[] = [
   {
     icon: ShieldCheck,
     title: "Privacy-respecting",
-    description: "Media streams directly from Instagram's own CDN to your device. We never store a copy on our servers.",
+    description:
+      "Media comes from Instagram's own CDN. Joining audio or making an MP3 uses a temporary file, deleted right after — we never keep a copy.",
   },
   {
     icon: Smartphone,
@@ -39,7 +40,7 @@ const FEATURES: Feature[] = [
   {
     icon: Layers,
     title: "Every content type",
-    description: "Photos, Reels, videos, and carousel posts — one tool, not four.",
+    description: "Photos, Reels, videos and carousel posts, plus a Reel's audio as MP3 — all in one tool.",
   },
   {
     icon: RefreshCw,

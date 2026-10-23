@@ -93,6 +93,26 @@ describe("downloadMediaSchema", () => {
     expect(downloadMediaSchema.safeParse({ url, filename: "a".repeat(256) }).success).toBe(false);
   });
 
+  it("offers MP3 as the only format", () => {
+    const url = "https://scontent.cdninstagram.com/v/a.mp4";
+    expect(downloadMediaSchema.safeParse({ url, filename: "a.mp3", format: "mp3" }).success).toBe(true);
+    for (const format of ["wav", "MP3", "", "mp3,wav"]) {
+      expect(downloadMediaSchema.safeParse({ url, filename: "a.mp3", format }).success, format).toBe(false);
+    }
+  });
+
+  // Asking for audio never loosens which URLs may be fetched.
+  it.each([
+    ["a non-CDN host", "https://example.com/a.mp4"],
+    ["plain http", "http://scontent.cdninstagram.com/v/a.mp4"],
+    ["an explicit port", "https://scontent.cdninstagram.com:8443/v/a.mp4"],
+    ["credentials", "https://user:pass@scontent.cdninstagram.com/v/a.mp4"],
+  ])("rejects %s for an MP3, as url or as audio", (_label, bad) => {
+    const good = "https://scontent.cdninstagram.com/v/a.mp4";
+    expect(downloadMediaSchema.safeParse({ url: bad, filename: "a.mp3", format: "mp3" }).success).toBe(false);
+    expect(downloadMediaSchema.safeParse({ url: good, audio: bad, filename: "a.mp3", format: "mp3" }).success).toBe(false);
+  });
+
   // The validator and the redirect-following service must apply one
   // allowlist. If either grows its own copy they can drift apart - and
   // drift between them is exactly the SSRF gap the per-hop check closes.

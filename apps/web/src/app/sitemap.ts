@@ -21,8 +21,8 @@ interface Page {
 // deploys rewrite file times, and a shallow clone has no history to read.
 // The legal pages share theirs with the "Last updated" line they show.
 const PAGES: Page[] = [
-  { path: "", lastModified: "2026-10-16", changeFrequency: "weekly", priority: 1 },
-  { path: "/support", lastModified: "2026-10-16", changeFrequency: "monthly", priority: 0.8 },
+  { path: "", lastModified: "2026-10-19", changeFrequency: "weekly", priority: 1 },
+  { path: "/support", lastModified: "2026-10-19", changeFrequency: "monthly", priority: 0.8 },
   { path: "/contact", lastModified: "2026-09-26", changeFrequency: "yearly", priority: 0.4 },
   { path: "/privacy-policy", lastModified: PRIVACY_POLICY_UPDATED, changeFrequency: "yearly", priority: 0.3 },
   { path: "/terms", lastModified: TERMS_UPDATED, changeFrequency: "yearly", priority: 0.3 },

@@ -1,13 +1,14 @@
 import type { Response } from "express";
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Transform, type TransformCallback } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { AppError } from "../errors/AppError";
 import { isAllowedCdnUrlString } from "../constants/allowedCdnHosts";
+import { readMp4Tracks, type Mp4Tracks } from "./scrapers/mediaExtractionHelpers";
 
 // A CDN URL that redirects is normal; a chain this long isn't, and
 // following one indefinitely is a cheap way to tie up a worker.
@@ -47,7 +48,14 @@ const MAX_DOWNLOAD_BYTES = readPositiveInt(process.env.DOWNLOAD_MAX_BYTES, 300 *
 // the endpoint exists to do.
 const MEDIA_CONTENT_TYPE = /^(video|image|audio)\//i;
 
+// Converting to MP3 decodes and re-encodes the sound, unlike the copy-only
+// join below, and keeps a whole file on disk while it runs. On a 512MB
+// container with one browser slot, a few at once is the most that leaves
+// room for scraping.
+const MAX_CONCURRENT_TRANSCODES = readPositiveInt(process.env.AUDIO_TRANSCODE_MAX_CONCURRENCY, 2);
+
 let activeDownloads = 0;
+let activeTranscodes = 0;
 
 /** Exposed for tests. */
 export function getActiveDownloadCount(): number {
@@ -337,9 +345,13 @@ function runFfmpeg(args: string[], signal: AbortSignal): Promise<MuxResult> {
 }
 
 /** Sends a finished local file, with its exact length. */
-async function sendFile(filePath: string, filename: string, res: Response): Promise<void> {
+async function sendFile(filePath: string, filename: string, res: Response, contentType = "video/mp4"): Promise<void> {
   const { size } = await stat(filePath);
-  res.setHeader("Content-Type", "video/mp4");
+  // The client may have left while the file was being prepared. A closed
+  // response emits neither finish nor close again, so waiting on one would
+  // hold the transfer slot forever.
+  if (res.destroyed) return;
+  res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(filename)}"`);
   res.setHeader("Content-Length", String(size));
 
@@ -454,6 +466,147 @@ async function muxToResponse(
   }
 }
 
+// Instagram's files declare their tracks (`moov`) at the start: progressive
+// renditions are faststart, and DASH streams open with their init segment.
+const TRACK_LIST_PROBE_BYTES = 2 * 1024 * 1024;
+// What ffmpeg says when `-map 0:a:0` finds no audio stream to convert.
+const NO_AUDIO_STREAM = /matches no streams|does not contain any stream/i;
+// An ID3 tag and a header frame alone are well under this; a tenth of a
+// second of 192kbps audio is already ~2.4KB. Below it, there is no sound.
+const MIN_MP3_AUDIO_BYTES = 4096;
+let mp3FfmpegMissingLogged = false;
+
+const noAudioError = () => new AppError("NO_AUDIO", "This reel has no audio to download.", 422);
+const conversionError = () =>
+  new AppError("SERVER_ERROR", "We couldn't convert the audio. Please try again.", 502);
+
+/** The track list a downloaded file declares; null when it declares none we can read. */
+async function readTrackList(filePath: string): Promise<Mp4Tracks | null> {
+  const file = await open(filePath, "r");
+  try {
+    const head = Buffer.alloc(TRACK_LIST_PROBE_BYTES);
+    const { bytesRead } = await file.read(head, 0, TRACK_LIST_PROBE_BYTES, 0);
+    return readMp4Tracks(head.subarray(0, bytesRead));
+  } finally {
+    await file.close();
+  }
+}
+
+/** Whether a finished file is an MP3 carrying sound: a frame after any ID3 tag, and enough of them. */
+async function hasMp3Audio(filePath: string): Promise<boolean> {
+  const { size } = await stat(filePath);
+  const file = await open(filePath, "r");
+  try {
+    const head = Buffer.alloc(64 * 1024);
+    const { bytesRead } = await file.read(head, 0, head.length, 0);
+    let offset = 0;
+    if (bytesRead >= 10 && head.toString("latin1", 0, 3) === "ID3") {
+      // ID3v2 size: four 7-bit bytes, plus a 10-byte footer when flagged.
+      const tagSize = ((head[6]! & 0x7f) << 21) | ((head[7]! & 0x7f) << 14) | ((head[8]! & 0x7f) << 7) | (head[9]! & 0x7f);
+      offset = 10 + tagSize + (head[5]! & 0x10 ? 10 : 0);
+    }
+    const frameSync = offset + 1 < bytesRead && head[offset] === 0xff && (head[offset + 1]! & 0xe0) === 0xe0;
+    return frameSync && size - offset >= MIN_MP3_AUDIO_BYTES;
+  } finally {
+    await file.close();
+  }
+}
+
+/** `reelsavenow_ABC.mp4` -> `reelsavenow_ABC.mp3`, whatever extension was asked for. */
+function mp3Filename(filename: string): string {
+  return `${sanitizeFilename(filename).replace(/\.[A-Za-z0-9]{1,5}$/, "")}.mp3`;
+}
+
+/**
+ * Saves only the sound of one media file, as an MP3. The file is fetched in
+ * full to a private temp folder (always removed afterwards) under the same
+ * allowlist and limits as any download, and checked before anything is
+ * sent - so a failure is an error response, never a "finished" MP3 that is
+ * silent, empty or cut short.
+ *
+ * Instagram's audio is AAC, so an MP3 is always a re-encode. Where Instagram
+ * has muted a reel, there is no audio track to convert, and that is said
+ * (422) rather than worked around.
+ */
+async function mp3ToResponse(sourceUrl: string, filename: string, res: Response): Promise<void> {
+  const abort = new AbortController();
+  const onClientGone = () => {
+    if (!res.writableFinished) abort.abort();
+  };
+  res.on("close", onClientGone);
+
+  const dir = await mkdtemp(path.join(tmpdir(), "reelsavenow-"));
+  const sourcePath = path.join(dir, "source.mp4");
+  const outputPath = path.join(dir, "audio.mp3");
+
+  try {
+    try {
+      await downloadToFile(sourceUrl, sourcePath, abort.signal);
+    } catch (error) {
+      if (abort.signal.aborted) return;
+      if (error instanceof AppError) throw error;
+      // Over the size cap, stalled mid-transfer, or the connection dropped.
+      throw new AppError("SERVER_ERROR", "Could not download this media right now. Please try again.", 502);
+    }
+
+    // What the file declares, not what its URL ends in. A file whose track
+    // list can't be read is left to ffmpeg, which fails on a missing stream.
+    const tracks = await readTrackList(sourcePath);
+    if (tracks !== null && tracks.audio === 0) throw noAudioError();
+
+    const result = await runFfmpeg(
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-i",
+        sourcePath,
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-map_metadata",
+        "-1",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "192k",
+        "-f",
+        "mp3",
+        "-y",
+        outputPath,
+      ],
+      abort.signal
+    );
+    if (abort.signal.aborted) return;
+    if (!result.ok) {
+      if (result.missing) {
+        if (!mp3FfmpegMissingLogged) {
+          mp3FfmpegMissingLogged = true;
+          console.warn(`[download] ffmpeg not found (${FFMPEG_PATH}); MP3 downloads cannot be converted`);
+        }
+        throw conversionError();
+      }
+      if (NO_AUDIO_STREAM.test(result.detail)) throw noAudioError();
+      console.warn(`[download] converting to MP3 failed: ${result.detail}`);
+      throw conversionError();
+    }
+
+    if (!(await hasMp3Audio(outputPath))) {
+      console.warn("[download] converting to MP3 produced no audio; nothing sent");
+      throw conversionError();
+    }
+
+    await sendFile(outputPath, mp3Filename(filename), res, "audio/mpeg");
+  } finally {
+    res.off("close", onClientGone);
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+const busyError = () =>
+  new AppError("SERVER_ERROR", "We're handling too many downloads right now. Please try again in a moment.", 503);
+
 /**
  * Holds one of a fixed number of transfer slots for the whole download, and
  * refuses with 503 rather than queueing: a download is user-initiated and
@@ -465,13 +618,7 @@ async function streamWithinCapacity(
   res: Response,
   audioUrl?: string
 ): Promise<void> {
-  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
-    throw new AppError(
-      "SERVER_ERROR",
-      "We're handling too many downloads right now. Please try again in a moment.",
-      503
-    );
-  }
+  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) throw busyError();
 
   activeDownloads += 1;
   try {
@@ -482,4 +629,20 @@ async function streamWithinCapacity(
   }
 }
 
-export const downloadService = { streamToResponse: streamWithinCapacity };
+/** The same, plus one of the few conversion slots, held from download to send. */
+async function mp3WithinCapacity(sourceUrl: string, filename: string, res: Response): Promise<void> {
+  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS || activeTranscodes >= MAX_CONCURRENT_TRANSCODES) {
+    throw busyError();
+  }
+
+  activeDownloads += 1;
+  activeTranscodes += 1;
+  try {
+    await mp3ToResponse(sourceUrl, filename, res);
+  } finally {
+    activeDownloads -= 1;
+    activeTranscodes -= 1;
+  }
+}
+
+export const downloadService = { streamToResponse: streamWithinCapacity, mp3ToResponse: mp3WithinCapacity };

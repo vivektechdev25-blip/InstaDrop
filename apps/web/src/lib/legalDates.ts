@@ -1,8 +1,8 @@
 // The "Last updated" date of each legal page, in one place: the page shows it
 // and sitemap.ts reports it as <lastmod>, so the two cannot disagree. Change
 // the date whenever that page's wording changes.
-export const PRIVACY_POLICY_UPDATED = "2026-08-05";
-export const TERMS_UPDATED = "2026-08-05";
+export const PRIVACY_POLICY_UPDATED = "2026-10-19";
+export const TERMS_UPDATED = "2026-10-19";
 
 /**
  * "2026-08-05" -> "August 5, 2026". Pinned to en-US and UTC so the server
